@@ -54,17 +54,28 @@ jobs:
           python-version: '3.10'
 
       # ── 5. Install Python sidecar dependencies ────────────────────────────
+      # Reads sidecar/requirements.txt as the single source of truth (it
+      # pins torch<2.6 — demucs 4.0.1 calls torch.load() without
+      # weights_only=False, which torch>=2.6 broke by flipping that default,
+      # so an unpinned "latest" torch here breaks model loading entirely).
       - name: Install Python dependencies
         working-directory: sidecar
         run: |
           pip install --upgrade pip
-          pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
-          pip install demucs librosa soundfile numpy yt-dlp pyinstaller
+          pip install -r requirements.txt pyinstaller
 
       # ── 5b. Vendor a static ffmpeg (Demucs shells out to `ffmpeg` on PATH
       #        to decode every input format; bundling it makes the installed
       #        app work without the end user having ffmpeg on their PATH) ──
+      - name: Cache static ffmpeg
+        id: cache-ffmpeg
+        uses: actions/cache@v4
+        with:
+          path: sidecar/vendor/ffmpeg
+          key: ffmpeg-x86_64-pc-windows-msvc-v1
+
       - name: Download static ffmpeg
+        if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
         working-directory: sidecar
         shell: pwsh
         run: |
@@ -74,7 +85,37 @@ jobs:
           Expand-Archive ffmpeg.zip -DestinationPath ffmpeg-extracted
           $exe = Get-ChildItem -Path ffmpeg-extracted -Recurse -Filter ffmpeg.exe | Select-Object -First 1
           Copy-Item $exe.FullName "$dest/ffmpeg.exe"
+          $license = Get-ChildItem -Path ffmpeg-extracted -Recurse -Filter "LICENSE*" | Select-Object -First 1
+          if ($license) { Copy-Item $license.FullName "$dest/ffmpeg-LICENSE.txt" }
           Remove-Item ffmpeg.zip, ffmpeg-extracted -Recurse -Force
+
+      # ── 5c. Vendor the default-quality Demucs model weights (htdemucs,
+      #        htdemucs_6s) so the installed app doesn't need internet
+      #        access on first use — same self-contained requirement as
+      #        ffmpeg above. htdemucs_ft (high_quality option) is not
+      #        bundled and still downloads on demand for that opt-in path.
+      - name: Cache Demucs model weights
+        id: cache-demucs-models
+        uses: actions/cache@v4
+        with:
+          path: sidecar/vendor/demucs-models
+          key: demucs-models-v1
+
+      - name: Fetch Demucs model weights
+        if: steps.cache-demucs-models.outputs.cache-hit != 'true'
+        working-directory: sidecar
+        run: python fetch_models.py
+
+      # ── 5d. Stage third-party license notices into the app bundle ────────
+      - name: Stage third-party notices
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force src-tauri/resources/third-party-notices | Out-Null
+          $license = "sidecar/vendor/ffmpeg/x86_64-pc-windows-msvc/ffmpeg-LICENSE.txt"
+          if (Test-Path $license) {
+            Copy-Item $license src-tauri/resources/third-party-notices/ffmpeg-LICENSE.txt
+          }
+          Copy-Item THIRD-PARTY-NOTICES.md src-tauri/resources/third-party-notices/
 
       # ── 6. Freeze the Python sidecar with PyInstaller ────────────────────
       - name: Build Python sidecar (PyInstaller)
@@ -90,9 +131,11 @@ jobs:
             --hidden-import=librosa \
             --hidden-import=soundfile \
             --hidden-import=numpy \
+            --hidden-import=win32crypt \
             --collect-data=demucs \
             --collect-all=yt_dlp \
             --add-binary "vendor/ffmpeg/x86_64-pc-windows-msvc/ffmpeg.exe;." \
+            --add-data "vendor/demucs-models;demucs-models" \
             --noconfirm \
             --clean
 
@@ -201,17 +244,28 @@ jobs:
           python-version: '3.10'
 
       # ── 5. Install Python sidecar dependencies ────────────────────────────
+      # Reads sidecar/requirements.txt as the single source of truth (it
+      # pins torch<2.6 — demucs 4.0.1 calls torch.load() without
+      # weights_only=False, which torch>=2.6 broke by flipping that default,
+      # so an unpinned "latest" torch here breaks model loading entirely).
       - name: Install Python dependencies
         working-directory: sidecar
         run: |
           pip install --upgrade pip
-          pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
-          pip install demucs librosa soundfile numpy yt-dlp pyinstaller
+          pip install -r requirements.txt pyinstaller
 
       # ── 5b. Vendor a static ffmpeg (Demucs shells out to `ffmpeg` on PATH
       #        to decode every input format; bundling it makes the installed
       #        app work without the end user having ffmpeg on their PATH) ──
+      - name: Cache static ffmpeg
+        id: cache-ffmpeg
+        uses: actions/cache@v4
+        with:
+          path: sidecar/vendor/ffmpeg
+          key: ffmpeg-aarch64-apple-darwin-v1
+
       - name: Download static ffmpeg
+        if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
         working-directory: sidecar
         run: |
           dest="vendor/ffmpeg/aarch64-apple-darwin"
@@ -221,6 +275,29 @@ jobs:
           cp ffmpeg-extracted/ffmpeg "$dest/ffmpeg"
           chmod +x "$dest/ffmpeg"
           rm -rf ffmpeg.zip ffmpeg-extracted
+
+      # ── 5c. Vendor the default-quality Demucs model weights (htdemucs,
+      #        htdemucs_6s) so the installed app doesn't need internet
+      #        access on first use — same self-contained requirement as
+      #        ffmpeg above. htdemucs_ft (high_quality option) is not
+      #        bundled and still downloads on demand for that opt-in path.
+      - name: Cache Demucs model weights
+        id: cache-demucs-models
+        uses: actions/cache@v4
+        with:
+          path: sidecar/vendor/demucs-models
+          key: demucs-models-v1
+
+      - name: Fetch Demucs model weights
+        if: steps.cache-demucs-models.outputs.cache-hit != 'true'
+        working-directory: sidecar
+        run: python3 fetch_models.py
+
+      # ── 5d. Stage third-party license notices into the app bundle ────────
+      - name: Stage third-party notices
+        run: |
+          mkdir -p src-tauri/resources/third-party-notices
+          cp THIRD-PARTY-NOTICES.md src-tauri/resources/third-party-notices/
 
       # ── 6. Freeze the Python sidecar with PyInstaller ────────────────────
       - name: Build Python sidecar (PyInstaller)
@@ -238,6 +315,7 @@ jobs:
             --collect-data=demucs \
             --collect-all=yt_dlp \
             --add-binary "vendor/ffmpeg/aarch64-apple-darwin/ffmpeg:." \
+            --add-data "vendor/demucs-models:demucs-models" \
             --noconfirm \
             --clean
 

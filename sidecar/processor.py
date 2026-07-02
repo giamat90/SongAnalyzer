@@ -24,11 +24,28 @@ import os
 import sys
 import gc
 import traceback
+from pathlib import Path
 import numpy as np
 import soundfile as sf
 import librosa
 
 SAMPLE_RATE = 22050
+
+# htdemucs / htdemucs_6s weights are vendored into the frozen sidecar (see
+# fetch_models.py + build.py) so the installed app doesn't need internet
+# access on first use. htdemucs_ft (the high_quality first pass) is not
+# vendored — it's an extra 4x84MB only needed for that opt-in path, and
+# still falls back to demucs's normal network download.
+def _bundled_model_repo() -> Path | None:
+    if getattr(sys, "frozen", False):
+        base = Path(getattr(sys, "_MEIPASS", os.path.dirname(sys.executable)))
+        candidate = base / "demucs-models"
+    else:
+        # Dev mode: use the same vendor/ dir fetch_models.py writes to, if
+        # it's been run locally — otherwise fall back to demucs's network
+        # download as before.
+        candidate = Path(__file__).parent / "vendor" / "demucs-models"
+    return candidate if candidate.is_dir() else None
 
 MAJOR_PROFILE = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
 MINOR_PROFILE = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
@@ -70,7 +87,11 @@ def _run_demucs(model_name: str, input_path: str, p0: float, p1: float, on_progr
 
     on_progress(p0 + span * 0.00, "stem-separation")
     _log(f"Loading Demucs model ({model_name})...")
-    model = get_model(model_name)
+    repo = _bundled_model_repo()
+    if repo is not None and (repo / f"{model_name}.yaml").exists():
+        model = get_model(model_name, repo=repo)
+    else:
+        model = get_model(model_name)
     model.eval()
     on_progress(p0 + span * 0.07, "stem-separation")
 
@@ -152,32 +173,18 @@ def _assign_fret(midi_pitch: int, prev_string: int, prev_fret: int) -> tuple:
 def _transcribe_bass(bass_path: str) -> list:
     y, sr = librosa.load(bass_path, sr=SAMPLE_RATE, mono=True)
 
-    try:
-        import crepe
-        _log("Running CREPE pitch tracking (medium)...")
-        time_arr, freq_arr, conf_arr, _ = crepe.predict(
-            y, sr, model_capacity='medium', viterbi=True, step_size=10, verbose=0,
-        )
-        voiced_flag = conf_arr >= 0.5
-        f0, times, frame_dur = freq_arr, time_arr, 0.010
+    HOP = 512
+    frame_dur = HOP / sr
+    f0, voiced_flag, _ = librosa.pyin(
+        y,
+        fmin=librosa.note_to_hz("E1"),
+        fmax=librosa.note_to_hz("G4"),
+        sr=sr, frame_length=2048, hop_length=HOP, fill_na=None,
+    )
+    times = librosa.times_like(f0, sr=sr, hop_length=HOP)
 
-        def _midi_float(f):
-            return 12.0 * np.log2(f / 440.0) + 69.0
-
-    except Exception as e:
-        _log(f"CREPE unavailable, falling back to pyin: {e}")
-        HOP = 512
-        frame_dur = HOP / sr
-        f0, voiced_flag, _ = librosa.pyin(
-            y,
-            fmin=librosa.note_to_hz("E1"),
-            fmax=librosa.note_to_hz("G4"),
-            sr=sr, frame_length=2048, hop_length=HOP, fill_na=None,
-        )
-        times = librosa.times_like(f0, sr=sr, hop_length=HOP)
-
-        def _midi_float(f):
-            return float(librosa.hz_to_midi(f))
+    def _midi_float(f):
+        return float(librosa.hz_to_midi(f))
 
     notes = []
     prev_string, prev_fret = 0, 0

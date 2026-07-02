@@ -27,7 +27,8 @@ else:
 # injection that makes the bundled copy discoverable.
 ffmpeg_name = "ffmpeg.exe" if system == "windows" else "ffmpeg"
 vendored_ffmpeg = os.path.join("vendor", "ffmpeg", suffix, ffmpeg_name)
-add_binary_sep = ";" if system == "windows" else ":"
+vendored_models = os.path.join("vendor", "demucs-models")
+add_sep = ";" if system == "windows" else ":"
 
 args = [
     "main.py",
@@ -45,11 +46,26 @@ args = [
     "--clean",
 ]
 
+if system == "windows":
+    # yt-dlp's cookiesfrombrowser fallback needs DPAPI access via pywin32 to
+    # decrypt Chrome-family cookie stores; it's a lazy/optional import so
+    # PyInstaller's static analysis won't find it on its own.
+    args.append("--hidden-import=win32crypt")
+
 if os.path.isfile(vendored_ffmpeg):
-    args.append(f"--add-binary={vendored_ffmpeg}{add_binary_sep}.")
+    args.append(f"--add-binary={vendored_ffmpeg}{add_sep}.")
 else:
     print(f"WARNING: no vendored ffmpeg at {vendored_ffmpeg} — sidecar will "
           f"depend on ffmpeg being present on the end user's PATH.")
+
+# htdemucs / htdemucs_6s weights (see fetch_models.py) so the installed app
+# doesn't need internet access to download ~140MB on first use.
+if os.path.isdir(vendored_models):
+    args.append(f"--add-data={vendored_models}{add_sep}demucs-models")
+else:
+    print(f"WARNING: no vendored Demucs models at {vendored_models} — run "
+          f"fetch_models.py first, or the sidecar will depend on internet "
+          f"access on first use.")
 
 PyInstaller.__main__.run(args)
 
