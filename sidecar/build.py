@@ -36,7 +36,6 @@ args = [
     "--onefile",
     f"--name={name}-{suffix}",
     "--hidden-import=demucs",
-    "--hidden-import=demucs.api",
     "--hidden-import=demucs.pretrained",
     "--hidden-import=librosa",
     "--hidden-import=soundfile",

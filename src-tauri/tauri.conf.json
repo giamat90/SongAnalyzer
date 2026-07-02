@@ -37,7 +37,7 @@
       "binaries/song-practice-studio-sidecar"
     ],
     "resources": [
-      "resources/third-party-notices/**"
+      "resources/third-party-notices/**/*"
     ],
     "icon": [
       "icons/32x32.png",
