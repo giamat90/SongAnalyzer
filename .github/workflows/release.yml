@@ -61,6 +61,21 @@ jobs:
           pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
           pip install demucs librosa soundfile numpy yt-dlp pyinstaller
 
+      # ── 5b. Vendor a static ffmpeg (Demucs shells out to `ffmpeg` on PATH
+      #        to decode every input format; bundling it makes the installed
+      #        app work without the end user having ffmpeg on their PATH) ──
+      - name: Download static ffmpeg
+        working-directory: sidecar
+        shell: pwsh
+        run: |
+          $dest = "vendor/ffmpeg/x86_64-pc-windows-msvc"
+          New-Item -ItemType Directory -Force $dest | Out-Null
+          Invoke-WebRequest -Uri "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-lgpl.zip" -OutFile ffmpeg.zip
+          Expand-Archive ffmpeg.zip -DestinationPath ffmpeg-extracted
+          $exe = Get-ChildItem -Path ffmpeg-extracted -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+          Copy-Item $exe.FullName "$dest/ffmpeg.exe"
+          Remove-Item ffmpeg.zip, ffmpeg-extracted -Recurse -Force
+
       # ── 6. Freeze the Python sidecar with PyInstaller ────────────────────
       - name: Build Python sidecar (PyInstaller)
         working-directory: sidecar
@@ -77,6 +92,7 @@ jobs:
             --hidden-import=numpy \
             --collect-data=demucs \
             --collect-all=yt_dlp \
+            --add-binary "vendor/ffmpeg/x86_64-pc-windows-msvc/ffmpeg.exe;." \
             --noconfirm \
             --clean
 
@@ -86,6 +102,13 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force src-tauri/binaries | Out-Null
           Copy-Item sidecar/dist/song-practice-studio-sidecar-x86_64-pc-windows-msvc.exe src-tauri/binaries/
+
+      # ── 7b. Smoke-test the frozen sidecar end-to-end (catches missing
+      #        native libs / DLLs — e.g. ffmpeg, numba, torch — that a
+      #        plain "does it launch" check would miss) ────────────────────
+      - name: Smoke test sidecar binary
+        shell: pwsh
+        run: python sidecar/smoke_test.py src-tauri/binaries/song-practice-studio-sidecar-x86_64-pc-windows-msvc.exe
 
       # ── 8. Install Node dependencies ──────────────────────────────────────
       - name: Install frontend dependencies
@@ -185,6 +208,20 @@ jobs:
           pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
           pip install demucs librosa soundfile numpy yt-dlp pyinstaller
 
+      # ── 5b. Vendor a static ffmpeg (Demucs shells out to `ffmpeg` on PATH
+      #        to decode every input format; bundling it makes the installed
+      #        app work without the end user having ffmpeg on their PATH) ──
+      - name: Download static ffmpeg
+        working-directory: sidecar
+        run: |
+          dest="vendor/ffmpeg/aarch64-apple-darwin"
+          mkdir -p "$dest"
+          curl -L "https://evermeet.cx/ffmpeg/getrelease/zip" -o ffmpeg.zip
+          unzip -o ffmpeg.zip -d ffmpeg-extracted
+          cp ffmpeg-extracted/ffmpeg "$dest/ffmpeg"
+          chmod +x "$dest/ffmpeg"
+          rm -rf ffmpeg.zip ffmpeg-extracted
+
       # ── 6. Freeze the Python sidecar with PyInstaller ────────────────────
       - name: Build Python sidecar (PyInstaller)
         working-directory: sidecar
@@ -200,6 +237,7 @@ jobs:
             --hidden-import=numpy \
             --collect-data=demucs \
             --collect-all=yt_dlp \
+            --add-binary "vendor/ffmpeg/aarch64-apple-darwin/ffmpeg:." \
             --noconfirm \
             --clean
 
@@ -208,6 +246,12 @@ jobs:
         run: |
           mkdir -p src-tauri/binaries
           cp sidecar/dist/song-practice-studio-sidecar-aarch64-apple-darwin src-tauri/binaries/
+
+      # ── 7b. Smoke-test the frozen sidecar end-to-end (catches missing
+      #        native libs / DLLs — e.g. ffmpeg, numba, torch — that a
+      #        plain "does it launch" check would miss) ────────────────────
+      - name: Smoke test sidecar binary
+        run: python3 sidecar/smoke_test.py src-tauri/binaries/song-practice-studio-sidecar-aarch64-apple-darwin
 
       # ── 8. Install Node dependencies ──────────────────────────────────────
       - name: Install frontend dependencies
