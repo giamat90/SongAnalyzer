@@ -85,6 +85,8 @@ jobs:
           Expand-Archive ffmpeg.zip -DestinationPath ffmpeg-extracted
           $exe = Get-ChildItem -Path ffmpeg-extracted -Recurse -Filter ffmpeg.exe | Select-Object -First 1
           Copy-Item $exe.FullName "$dest/ffmpeg.exe"
+          $probe = Get-ChildItem -Path ffmpeg-extracted -Recurse -Filter ffprobe.exe | Select-Object -First 1
+          Copy-Item $probe.FullName "$dest/ffprobe.exe"
           $license = Get-ChildItem -Path ffmpeg-extracted -Recurse -Filter "LICENSE*" | Select-Object -First 1
           if ($license) { Copy-Item $license.FullName "$dest/ffmpeg-LICENSE.txt" }
           Remove-Item ffmpeg.zip, ffmpeg-extracted -Recurse -Force
@@ -118,26 +120,13 @@ jobs:
           Copy-Item THIRD-PARTY-NOTICES.md src-tauri/resources/third-party-notices/
 
       # ── 6. Freeze the Python sidecar with PyInstaller ────────────────────
+      # Delegates to build.py (single source of truth for PyInstaller args)
+      # instead of duplicating the flag list here — a prior duplication
+      # here is exactly how the ffprobe binary got missed in a previous
+      # release despite being added to build.py.
       - name: Build Python sidecar (PyInstaller)
         working-directory: sidecar
-        shell: bash
-        run: |
-          pyinstaller main.py \
-            --onefile \
-            --name song-practice-studio-sidecar-x86_64-pc-windows-msvc \
-            --hidden-import=demucs \
-            --hidden-import=demucs.api \
-            --hidden-import=demucs.pretrained \
-            --hidden-import=librosa \
-            --hidden-import=soundfile \
-            --hidden-import=numpy \
-            --hidden-import=win32crypt \
-            --collect-data=demucs \
-            --collect-all=yt_dlp \
-            --add-binary "vendor/ffmpeg/x86_64-pc-windows-msvc/ffmpeg.exe;." \
-            --add-data "vendor/demucs-models;demucs-models" \
-            --noconfirm \
-            --clean
+        run: python build.py
 
       # ── 7. Stage sidecar binary ───────────────────────────────────────────
       - name: Stage sidecar binary
@@ -275,6 +264,11 @@ jobs:
           cp ffmpeg-extracted/ffmpeg "$dest/ffmpeg"
           chmod +x "$dest/ffmpeg"
           rm -rf ffmpeg.zip ffmpeg-extracted
+          curl -L "https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip" -o ffprobe.zip
+          unzip -o ffprobe.zip -d ffprobe-extracted
+          cp ffprobe-extracted/ffprobe "$dest/ffprobe"
+          chmod +x "$dest/ffprobe"
+          rm -rf ffprobe.zip ffprobe-extracted
 
       # ── 5c. Vendor the default-quality Demucs model weights (htdemucs,
       #        htdemucs_6s) so the installed app doesn't need internet
@@ -300,24 +294,13 @@ jobs:
           cp THIRD-PARTY-NOTICES.md src-tauri/resources/third-party-notices/
 
       # ── 6. Freeze the Python sidecar with PyInstaller ────────────────────
+      # Delegates to build.py (single source of truth for PyInstaller args)
+      # instead of duplicating the flag list here — a prior duplication
+      # here is exactly how the ffprobe binary got missed in a previous
+      # release despite being added to build.py.
       - name: Build Python sidecar (PyInstaller)
         working-directory: sidecar
-        run: |
-          pyinstaller main.py \
-            --onefile \
-            --name song-practice-studio-sidecar-aarch64-apple-darwin \
-            --hidden-import=demucs \
-            --hidden-import=demucs.api \
-            --hidden-import=demucs.pretrained \
-            --hidden-import=librosa \
-            --hidden-import=soundfile \
-            --hidden-import=numpy \
-            --collect-data=demucs \
-            --collect-all=yt_dlp \
-            --add-binary "vendor/ffmpeg/aarch64-apple-darwin/ffmpeg:." \
-            --add-data "vendor/demucs-models:demucs-models" \
-            --noconfirm \
-            --clean
+        run: python3 build.py
 
       # ── 7. Stage sidecar binary ───────────────────────────────────────────
       - name: Stage sidecar binary

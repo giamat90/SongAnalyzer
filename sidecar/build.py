@@ -20,13 +20,14 @@ elif system == "windows":
 else:
     suffix = "unknown"
 
-# Demucs shells out to a bare `ffmpeg` on PATH to decode every input format.
-# If a static ffmpeg binary has been staged at vendor/ffmpeg/{suffix}/, bundle
-# it into the onefile exe so the installed app doesn't depend on the end
-# user having ffmpeg on their system PATH. See main.py for the runtime PATH
-# injection that makes the bundled copy discoverable.
-ffmpeg_name = "ffmpeg.exe" if system == "windows" else "ffmpeg"
-vendored_ffmpeg = os.path.join("vendor", "ffmpeg", suffix, ffmpeg_name)
+# Demucs shells out to bare `ffmpeg` (audio.py:read) AND `ffprobe`
+# (audio.py:_read_info, used to inspect the file before decoding) on PATH.
+# If static binaries have been staged at vendor/ffmpeg/{suffix}/, bundle
+# them into the onefile exe so the installed app doesn't depend on the end
+# user having either on their system PATH. See main.py for the runtime PATH
+# injection that makes the bundled copies discoverable.
+exe_suffix = ".exe" if system == "windows" else ""
+vendor_ffmpeg_dir = os.path.join("vendor", "ffmpeg", suffix)
 vendored_models = os.path.join("vendor", "demucs-models")
 add_sep = ";" if system == "windows" else ":"
 
@@ -52,11 +53,13 @@ if system == "windows":
     # PyInstaller's static analysis won't find it on its own.
     args.append("--hidden-import=win32crypt")
 
-if os.path.isfile(vendored_ffmpeg):
-    args.append(f"--add-binary={vendored_ffmpeg}{add_sep}.")
-else:
-    print(f"WARNING: no vendored ffmpeg at {vendored_ffmpeg} — sidecar will "
-          f"depend on ffmpeg being present on the end user's PATH.")
+for tool in ("ffmpeg", "ffprobe"):
+    vendored_tool = os.path.join(vendor_ffmpeg_dir, f"{tool}{exe_suffix}")
+    if os.path.isfile(vendored_tool):
+        args.append(f"--add-binary={vendored_tool}{add_sep}.")
+    else:
+        print(f"WARNING: no vendored {tool} at {vendored_tool} — sidecar will "
+              f"depend on {tool} being present on the end user's PATH.")
 
 # htdemucs / htdemucs_6s weights (see fetch_models.py) so the installed app
 # doesn't need internet access to download ~140MB on first use.
