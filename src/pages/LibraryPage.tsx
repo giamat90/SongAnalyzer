@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import DropZone from "../components/upload/DropZone";
 import YouTubeImport from "../components/upload/YouTubeImport";
 import RecordingOffsetControl from "../components/recording/RecordingOffsetControl";
@@ -60,10 +61,15 @@ function LibraryPage({ onSelectSong }: LibraryPageProps) {
   const clearError          = useLibraryStore((s) => s.clearError);
   const initProgressListener = useLibraryStore((s) => s.initProgressListener);
   const [showSettings, setShowSettings] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
+  const [appVersion, setAppVersion] = useState("");
 
   useEffect(() => {
     fetchSongs();
     const cleanupPromise = initProgressListener();
+    getVersion()
+      .then(setAppVersion)
+      .catch((e: unknown) => console.warn("[About] getVersion failed:", e));
     return () => {
       cleanupPromise.then((unlisten) => unlisten());
     };
@@ -73,14 +79,40 @@ function LibraryPage({ onSelectSong }: LibraryPageProps) {
     <div className="library-page">
       <header className="library-page__header">
         <h1>Song Practice Studio</h1>
-        <button
-          className={`library-page__settings-btn${showSettings ? " library-page__settings-btn--active" : ""}`}
-          onClick={() => setShowSettings((v) => !v)}
-          title="Recording settings"
-        >
-          ⚙
-        </button>
+        <div className="library-page__header-actions">
+          <button
+            className={`library-page__settings-btn${showSettings ? " library-page__settings-btn--active" : ""}`}
+            onClick={() => setShowSettings((v) => !v)}
+            title="Recording settings"
+          >
+            ⚙
+          </button>
+          <button
+            className="library-page__about-btn"
+            onClick={() => setShowAbout(true)}
+            title="About"
+          >
+            ⓘ
+          </button>
+        </div>
       </header>
+
+      {showAbout && (
+        <div className="about-overlay" onClick={() => setShowAbout(false)}>
+          <div className="about-modal" onClick={(e) => e.stopPropagation()}>
+            <h2 className="about-modal__title">Song Practice Studio</h2>
+            {appVersion && <p className="about-modal__version">v{appVersion}</p>}
+            <p className="about-modal__desc">
+              Desktop app for musicians: drop any audio file or paste a YouTube URL,
+              split it into up to six instrument stems with Demucs, then mix, loop,
+              slow down, and record a take alongside the separated tracks.
+            </p>
+            <button className="about-modal__close" onClick={() => setShowAbout(false)}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="library-page__import">
         <DropZone />
