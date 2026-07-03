@@ -2,6 +2,7 @@ mod commands;
 mod library;
 mod sidecar;
 mod storage;
+mod takes;
 
 use commands::SidecarState;
 
@@ -17,6 +18,11 @@ pub fn run() {
             commands::export_stem,
             commands::list_songs,
             commands::delete_song,
+            commands::save_take,
+            commands::list_takes,
+            commands::delete_take,
+            commands::rename_take,
+            commands::export_take,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

@@ -25,6 +25,14 @@ export class AudioEngine {
   private _rafId: number | null = null;
   private _lastNotifyTime = 0;
 
+  // Recorded take — separate from the stems map since its duration/start
+  // position can differ from the shared song timeline (e.g. punch-in takes).
+  private _take: WaveSurfer | null = null;
+  private _takeOffset = 0;
+  private _takeDuration = 0;
+  private _takeAudioOffset = 0;
+  private _takeIsPlaying = false;
+
   async load(
     songDir: string,
     stemNames: string[],
@@ -72,13 +80,14 @@ export class AudioEngine {
     this._master = this._stems.get(masterName)!;
     this._duration = this._master.getDuration();
 
-    // Sync: clicking any stem waveform seeks all others
+    // Sync: clicking any stem waveform seeks all others (and the take, if loaded)
     for (const [name, ws] of this._stems) {
       ws.on("interaction", (time) => {
         const progress = Math.max(0, Math.min(1, time / this._duration));
         for (const [otherName, other] of this._stems) {
           if (otherName !== name) other.seekTo(progress);
         }
+        this._seekTake(time);
       });
     }
 
@@ -92,12 +101,22 @@ export class AudioEngine {
   play(): void {
     if (this._stems.size === 0) return;
     for (const ws of this._stems.values()) ws.play();
+    if (this._take && this._takeDuration > 0) {
+      const time = this.getCurrentTime();
+      const takeEnd = this._takeOffset + this._takeDuration - this._takeAudioOffset;
+      if (time >= this._takeOffset && time < takeEnd) {
+        this._take.play();
+        this._takeIsPlaying = true;
+      }
+    }
     this._isPlaying = true;
     this._startTimeUpdate();
   }
 
   pause(): void {
     for (const ws of this._stems.values()) ws.pause();
+    this._take?.pause();
+    this._takeIsPlaying = false;
     this._isPlaying = false;
     this._stopTimeUpdate();
   }
@@ -115,6 +134,7 @@ export class AudioEngine {
   seekTo(time: number): void {
     const progress = Math.max(0, Math.min(1, time / this._duration));
     for (const ws of this._stems.values()) ws.seekTo(progress);
+    this._seekTake(time);
   }
 
   setStemVolume(name: string, volume: number): void {
@@ -123,12 +143,106 @@ export class AudioEngine {
 
   setPlaybackRate(rate: number): void {
     for (const ws of this._stems.values()) ws.setPlaybackRate(rate);
+    this._take?.setPlaybackRate(rate);
   }
 
   async setOutputDevice(deviceId: string): Promise<void> {
-    await Promise.all(
-      [...this._stems.values()].map((ws) => ws.setSinkId(deviceId))
-    );
+    await Promise.all([
+      ...[...this._stems.values()].map((ws) => ws.setSinkId(deviceId)),
+      ...(this._take ? [this._take.setSinkId(deviceId)] : []),
+    ]);
+  }
+
+  /** Enable/disable click-to-seek on stem waveforms (disabled while recording). */
+  setInteract(enabled: boolean): void {
+    for (const ws of this._stems.values()) ws.setOptions({ interact: enabled });
+    this._take?.setOptions({ interact: enabled });
+  }
+
+  async loadTakeTrack(filePath: string, container: HTMLElement, startOffset = 0, audioOffset = 0): Promise<void> {
+    this._take?.destroy();
+    this._take = null;
+
+    const wasPlaying = this._isPlaying;
+    const url = convertFileSrc(filePath.replace(/\\/g, "/"));
+
+    this._take = WaveSurfer.create({
+      container,
+      url,
+      height: 64,
+      waveColor: "#ff8c1e",
+      progressColor: "#ff8c1e",
+      cursorColor: "#ff8c1e",
+      cursorWidth: 2,
+      barWidth: 2,
+      barGap: 1,
+      barRadius: 2,
+      normalize: true,
+      interact: true,
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      const unsubReady = this._take!.on("ready", () => { unsubReady(); unsubError(); resolve(); });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const unsubError = this._take!.on("error", (err: any) => {
+        unsubReady(); unsubError();
+        console.error("[engine] WaveSurfer take load failed — url:", url, "raw err:", err);
+        reject(new Error(err?.message || err?.toString?.() || "WaveSurfer load error"));
+      });
+    });
+
+    this._takeOffset      = startOffset;
+    this._takeDuration    = this._take.getDuration();
+    this._takeAudioOffset = audioOffset;
+
+    // Constrain the container to the correct time window so the waveform
+    // lines up visually with the other tracks. Read railWidth BEFORE resizing
+    // so the ratio calculation uses the full width. setOptions({ width })
+    // forces WaveSurfer to redraw — more reliable than its ResizeObserver.
+    if (this._duration > 0 && this._takeDuration > 0) {
+      const railWidth   = container.offsetWidth;
+      const playableDur = this._takeDuration - audioOffset;
+      const widthPx     = Math.round((playableDur / this._duration) * railWidth);
+      const marginPx    = Math.round((startOffset / this._duration) * railWidth);
+      container.style.marginLeft = `${marginPx}px`;
+      container.style.width      = `${widthPx}px`;
+      this._take.setOptions({ width: widthPx });
+    }
+
+    this._take.on("interaction", (newTime) => {
+      const songTime = newTime - this._takeAudioOffset + this._takeOffset;
+      this.seekTo(songTime);
+    });
+
+    this._takeIsPlaying = false;
+    const time = this.getCurrentTime();
+    this._seekTake(time);
+    const takeEnd = this._takeOffset + this._takeDuration - this._takeAudioOffset;
+    if (wasPlaying && time >= this._takeOffset && time < takeEnd) {
+      this._take.play();
+      this._takeIsPlaying = true;
+    }
+  }
+
+  setTakeVolume(volume: number): void {
+    this._take?.setVolume(volume);
+  }
+
+  clearTakeTrack(): void {
+    this._take?.destroy();
+    this._take = null;
+    this._takeOffset = 0;
+    this._takeDuration = 0;
+    this._takeAudioOffset = 0;
+    this._takeIsPlaying = false;
+  }
+
+  // Seek the take to the position that corresponds to the given song time.
+  private _seekTake(songTime: number): void {
+    if (!this._take) return;
+    const dur = this._takeDuration > 0 ? this._takeDuration : this._duration;
+    const takeTime = this._takeAudioOffset + Math.max(0, songTime - this._takeOffset);
+    this._take.seekTo(Math.min(1, takeTime / dur));
   }
 
   setLoop(start: number, end: number): void {
@@ -170,6 +284,7 @@ export class AudioEngine {
     this._duration = 0;
     this._loopStart = null;
     this._loopEnd = null;
+    this.clearTakeTrack();
   }
 
   private _startTimeUpdate(): void {
@@ -185,6 +300,19 @@ export class AudioEngine {
         time >= this._loopEnd
       ) {
         this.seekTo(this._loopStart);
+      }
+
+      // Take window sync: start/stop the take as the playhead enters/exits its time window
+      if (this._take && this._takeDuration > 0) {
+        const takeEnd = this._takeOffset + this._takeDuration - this._takeAudioOffset;
+        const inWindow = time >= this._takeOffset && time < takeEnd;
+        if (inWindow && !this._takeIsPlaying) {
+          this._take.play();
+          this._takeIsPlaying = true;
+        } else if (!inWindow && this._takeIsPlaying) {
+          this._take.pause();
+          this._takeIsPlaying = false;
+        }
       }
 
       const now = performance.now();

@@ -1,6 +1,7 @@
 use crate::library::{self, Song};
 use crate::sidecar::{SidecarManager, SidecarMessage};
 use crate::storage;
+use crate::takes::{self, Take};
 use serde::Serialize;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
@@ -311,6 +312,121 @@ pub async fn export_stem(
 
     if let Some(path) = dest {
         std::fs::copy(src, path.as_path().ok_or("Invalid path")?)
+            .map_err(|e| format!("Copy failed: {e}"))?;
+    }
+    Ok(())
+}
+
+// --- Take (recorded track) commands ---
+
+#[tauri::command]
+pub async fn save_take(
+    song_id: String,
+    audio_data: Vec<u8>,
+    start_position: f64,
+    audio_offset: f64,
+) -> Result<Take, String> {
+    let take_id = uuid::Uuid::new_v4().to_string();
+    let takes_dir = storage::song_dir(&song_id).join("takes");
+    std::fs::create_dir_all(&takes_dir).map_err(|e| format!("Create takes dir: {e}"))?;
+
+    let file_path = takes_dir.join(format!("{take_id}.webm"));
+    std::fs::write(&file_path, &audio_data).map_err(|e| format!("Write take: {e}"))?;
+
+    let take = Take {
+        id: take_id,
+        song_id: song_id.clone(),
+        recorded_at: chrono::Utc::now().to_rfc3339(),
+        filepath: file_path.to_string_lossy().to_string(),
+        name: None,
+        start_position,
+        audio_offset,
+    };
+
+    takes::add(&song_id, take.clone())?;
+    Ok(take)
+}
+
+#[tauri::command]
+pub async fn list_takes(song_id: String) -> Result<Vec<Take>, String> {
+    takes::load(&song_id)
+}
+
+#[tauri::command]
+pub async fn delete_take(song_id: String, take_id: String) -> Result<(), String> {
+    takes::remove(&song_id, &take_id)
+}
+
+#[tauri::command]
+pub async fn rename_take(song_id: String, take_id: String, name: String) -> Result<Take, String> {
+    takes::rename(&song_id, &take_id, &name)
+}
+
+/// Deletes the wrapped temp file when dropped.
+struct TempFile(std::path::PathBuf);
+
+impl Drop for TempFile {
+    fn drop(&mut self) {
+        if let Err(e) = std::fs::remove_file(&self.0) {
+            log::warn!("Failed to remove temp export file {:?}: {e}", self.0);
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn export_take(
+    app: AppHandle,
+    state: State<'_, SidecarState>,
+    take_path: String,
+    suggested_name: String,
+) -> Result<(), String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let src = std::path::Path::new(&take_path);
+    if !src.exists() {
+        return Err(format!("Take not found: {take_path}"));
+    }
+
+    // The take is webm/opus (whatever MediaRecorder produced); decode it via
+    // the sidecar into a temp WAV file, then offer that through Save-As.
+    let temp_path = std::env::temp_dir().join(format!("{}.wav", uuid::Uuid::new_v4()));
+    let cmd = serde_json::json!({
+        "cmd": "convert_take",
+        "recordingPath": take_path,
+        "outputPath": temp_path.to_string_lossy(),
+    });
+    {
+        let guard = ensure_sidecar(&state)?;
+        let sidecar = guard.as_ref().ok_or("Sidecar not available")?;
+        sidecar.send_command(&cmd)?;
+
+        let timeout = Duration::from_secs(120);
+        loop {
+            match sidecar.recv_timeout(timeout)? {
+                SidecarMessage::Result { .. } => break,
+                SidecarMessage::Error { message, .. } => return Err(message),
+                _ => {}
+            }
+        }
+    }
+    let _temp_guard = TempFile(temp_path.clone());
+
+    let dest = tauri::async_runtime::spawn_blocking({
+        let app = app.clone();
+        let suggested_name = suggested_name.clone();
+        move || {
+            app.dialog()
+                .file()
+                .set_file_name(&suggested_name)
+                .add_filter("Audio", &["wav"])
+                .blocking_save_file()
+        }
+    })
+    .await
+    .map_err(|e| format!("Dialog task: {e}"))?;
+
+    if let Some(path) = dest {
+        std::fs::copy(&temp_path, path.as_path().ok_or("Invalid path")?)
             .map_err(|e| format!("Copy failed: {e}"))?;
     }
     Ok(())

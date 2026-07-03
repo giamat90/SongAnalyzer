@@ -20,6 +20,7 @@ if getattr(sys, "frozen", False):
     os.environ["PATH"] = bundled_dir + os.pathsep + os.environ.get("PATH", "")
 
 from processor import process
+from recording import convert_take_to_wav
 
 
 def send(msg: dict):
@@ -68,6 +69,10 @@ def main():
                     on_progress=make_progress_callback("import_yt"),
                 )
                 send({"type": "result", "cmd": "import_yt", "data": result})
+
+            elif cmd.get("cmd") == "convert_take":
+                result = convert_take_to_wav(cmd["recordingPath"], cmd["outputPath"])
+                send({"type": "result", "cmd": "convert_take", "data": result})
 
             elif cmd.get("cmd") == "ping":
                 send({"type": "pong"})

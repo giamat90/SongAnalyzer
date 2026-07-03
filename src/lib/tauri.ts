@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { ProcessingStatus, Song, StemName } from "./types";
+import type { ProcessingStatus, Song, StemName, Take } from "./types";
 
 /** Process a song file through the Python sidecar */
 export async function processSong(filePath: string, stemsToExtract?: StemName[], highQuality?: boolean): Promise<Song> {
@@ -28,6 +28,36 @@ export async function exportStem(
   suggestedName: string,
 ): Promise<void> {
   return invoke("export_stem", { stemPath, suggestedName });
+}
+
+/** Save a recorded take */
+export async function saveTake(
+  songId: string,
+  audioData: number[],
+  startPosition: number,
+  audioOffset = 0,
+): Promise<Take> {
+  return invoke<Take>("save_take", { songId, audioData, startPosition, audioOffset });
+}
+
+/** List takes recorded for a song */
+export async function listTakes(songId: string): Promise<Take[]> {
+  return invoke<Take[]>("list_takes", { songId });
+}
+
+/** Delete a take */
+export async function deleteTakeApi(songId: string, takeId: string): Promise<void> {
+  return invoke("delete_take", { songId, takeId });
+}
+
+/** Rename a take (empty/whitespace name clears it back to the default "Take N" label) */
+export async function renameTakeApi(songId: string, takeId: string, name: string): Promise<Take> {
+  return invoke<Take>("rename_take", { songId, takeId, name });
+}
+
+/** Open a native Save As dialog and export a take as WAV */
+export async function exportTake(takePath: string, suggestedName: string): Promise<void> {
+  return invoke("export_take", { takePath, suggestedName });
 }
 
 /** Listen for processing progress events */

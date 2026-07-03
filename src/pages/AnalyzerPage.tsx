@@ -2,6 +2,9 @@ import { useEffect } from "react";
 import StemView from "../components/player/StemView";
 import TransportControls from "../components/player/TransportControls";
 import TempoControl from "../components/player/TempoControl";
+import MicSelector from "../components/recording/MicSelector";
+import RecordButton from "../components/recording/RecordButton";
+import TakeList from "../components/recording/TakeList";
 import { useLibraryStore } from "../stores/library";
 import { usePlayerStore } from "../stores/player";
 
@@ -50,9 +53,15 @@ function AnalyzerPage({ songId, onBack }: AnalyzerPageProps) {
           <StemView song={song} />
         </div>
 
+        <div className="analyzer-page__takes">
+          <TakeList />
+        </div>
+
         <div className="analyzer-page__footer">
           <TransportControls />
           <TempoControl detectedBpm={song.detectedBpm} />
+          <MicSelector />
+          <RecordButton />
         </div>
       </div>
     </div>

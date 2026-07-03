@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import DropZone from "../components/upload/DropZone";
 import YouTubeImport from "../components/upload/YouTubeImport";
+import RecordingOffsetControl from "../components/recording/RecordingOffsetControl";
 import type { Song } from "../lib/types";
 import { useLibraryStore } from "../stores/library";
 
@@ -58,6 +59,7 @@ function LibraryPage({ onSelectSong }: LibraryPageProps) {
   const deleteSong          = useLibraryStore((s) => s.deleteSong);
   const clearError          = useLibraryStore((s) => s.clearError);
   const initProgressListener = useLibraryStore((s) => s.initProgressListener);
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     fetchSongs();
@@ -71,12 +73,25 @@ function LibraryPage({ onSelectSong }: LibraryPageProps) {
     <div className="library-page">
       <header className="library-page__header">
         <h1>Song Practice Studio</h1>
+        <button
+          className={`library-page__settings-btn${showSettings ? " library-page__settings-btn--active" : ""}`}
+          onClick={() => setShowSettings((v) => !v)}
+          title="Recording settings"
+        >
+          ⚙
+        </button>
       </header>
 
       <div className="library-page__import">
         <DropZone />
         <YouTubeImport />
       </div>
+
+      {showSettings && (
+        <div className="library-page__settings">
+          <RecordingOffsetControl />
+        </div>
+      )}
 
       {error && (
         <div className="library-page__error" role="alert">
