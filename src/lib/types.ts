@@ -10,6 +10,13 @@ export interface Song {
   directory: string;
   stems: StemName[];
   metronomeOffset?: number;
+  hasChords?: boolean;
+}
+
+export interface ChordSegment {
+  start: number;
+  end: number;
+  chord: string;
 }
 
 export interface ProcessingStatus {

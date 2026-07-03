@@ -1,4 +1,4 @@
-use crate::library::{self, Song};
+use crate::library::{self, ChordSegment, Song};
 use crate::sidecar::{SidecarManager, SidecarMessage};
 use crate::storage;
 use crate::takes::{self, Take};
@@ -119,6 +119,7 @@ pub async fn process_song(
                     .and_then(|v| v.as_object())
                     .map(|o| o.keys().cloned().collect())
                     .unwrap_or_default();
+                let has_chords = data.get("chords").and_then(|v| v.as_bool()).unwrap_or(false);
 
                 let now = chrono::Utc::now().to_rfc3339();
                 let song = Song {
@@ -131,6 +132,7 @@ pub async fn process_song(
                     directory: output_dir_str,
                     stems,
                     metronome_offset: None,
+                    has_chords,
                 };
 
                 library::add(song.clone())?;
@@ -252,6 +254,7 @@ pub async fn import_youtube(
                     .and_then(|v| v.as_object())
                     .map(|o| o.keys().cloned().collect())
                     .unwrap_or_default();
+                let has_chords = data.get("chords").and_then(|v| v.as_bool()).unwrap_or(false);
 
                 let song = Song {
                     id: song_id,
@@ -263,6 +266,7 @@ pub async fn import_youtube(
                     directory: output_dir_str,
                     stems,
                     metronome_offset: None,
+                    has_chords,
                 };
 
                 library::add(song.clone())?;
@@ -288,6 +292,11 @@ pub async fn import_youtube(
             _ => {}
         }
     }
+}
+
+#[tauri::command]
+pub async fn read_song_chords(song_id: String) -> Result<Vec<ChordSegment>, String> {
+    library::read_chords(&song_id)
 }
 
 #[tauri::command]

@@ -713,6 +713,28 @@ body,
   min-width: 0;
 }
 
+/* Chord row above the time ruler */
+.chord-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.2rem 0;
+}
+
+.chord-row__chip {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
+  padding: 0.1rem 0.4rem;
+}
+
+.chord-row__chip--active {
+  color: var(--text-primary);
+  border-color: #e94560;
+  background: rgba(233, 69, 96, 0.12);
+}
+
 /* Time ruler above the waveform tracks */
 .time-ruler {
   position: relative;

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { ProcessingStatus, Song, StemName, Take } from "./types";
+import type { ChordSegment, ProcessingStatus, Song, StemName, Take } from "./types";
 
 /** Process a song file through the Python sidecar */
 export async function processSong(filePath: string, stemsToExtract?: StemName[], highQuality?: boolean): Promise<Song> {
@@ -20,6 +20,11 @@ export async function deleteSong(songId: string): Promise<void> {
 /** Import a YouTube URL through yt-dlp + Demucs pipeline */
 export async function importYoutube(url: string, stemsToExtract?: StemName[], highQuality?: boolean): Promise<Song> {
   return invoke<Song>("import_youtube", { url, stemsToExtract, highQuality });
+}
+
+/** Read detected chord segments for a processed song */
+export async function readSongChords(songId: string): Promise<ChordSegment[]> {
+  return invoke<ChordSegment[]>("read_song_chords", { songId });
 }
 
 /** Open a native Save As dialog and copy a stem WAV to user-chosen location */
