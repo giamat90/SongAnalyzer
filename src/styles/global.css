@@ -868,75 +868,17 @@ body,
   letter-spacing: 0.05em;
 }
 
-.tempo-control__tabs {
-  display: flex;
-  gap: 0.15rem;
-  background: var(--bg-surface);
-  border-radius: 4px;
-  padding: 0.1rem;
-}
-
-.tempo-control__tab {
-  background: transparent;
-  border: none;
+.tempo-control__row-prefix {
+  font-size: 0.78rem;
   color: var(--text-secondary);
-  padding: 0.1rem 0.45rem;
-  border-radius: 3px;
-  cursor: pointer;
-  font-size: 0.7rem;
-  font-family: inherit;
-  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+  min-width: 3.6rem;
 }
 
-.tempo-control__tab--active {
-  background: var(--accent);
-  color: var(--text-primary);
-}
-
-.tempo-control__row {
+.tempo-control__bpm-group {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.tempo-control__slider {
-  flex: 1;
-  accent-color: var(--accent);
-}
-
-.tempo-control__value {
-  font-size: 0.85rem;
-  font-variant-numeric: tabular-nums;
-  min-width: 3rem;
-  text-align: right;
-}
-
-.tempo-control__presets {
-  display: flex;
-  gap: 0.3rem;
-  flex-wrap: wrap;
-}
-
-.tempo-control__preset {
-  background: var(--bg-surface);
-  border: none;
-  color: var(--text-secondary);
-  padding: 0.2rem 0.5rem;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.7rem;
-  font-family: inherit;
-  transition: background 0.15s, color 0.15s;
-}
-
-.tempo-control__preset:hover {
-  background: var(--accent);
-  color: var(--text-primary);
-}
-
-.tempo-control__preset--active {
-  background: var(--accent);
-  color: var(--text-primary);
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
 .tempo-control__bpm-row {
@@ -945,14 +887,8 @@ body,
   gap: 0.4rem;
 }
 
-.tempo-control__bpm-orig {
-  font-size: 0.78rem;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
 .tempo-control__bpm-input {
-  width: 4.5rem;
+  width: 3.75rem;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -972,10 +908,6 @@ body,
 .tempo-control__bpm-unit {
   font-size: 0.78rem;
   color: var(--text-secondary);
-}
-
-.tempo-control__bpm-rate {
-  margin-left: auto;
 }
 
 /* Key Transpose */
@@ -1600,14 +1532,16 @@ body,
   overflow-y: auto;
 }
 
-.analyzer-page__footer {
-  display: flex;
-  gap: 1.5rem;
-  align-items: flex-start;
-  padding: 0.75rem 1rem;
-  background: var(--bg-secondary);
-  border-radius: 10px;
+.analyzer-page__topbar {
   flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  background: var(--bg-primary);
 }
 
 /* Stem View */

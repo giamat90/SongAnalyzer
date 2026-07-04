@@ -48,6 +48,13 @@ function AnalyzerPage({ songId, onBack }: AnalyzerPageProps) {
         </div>
       </header>
 
+      <div className="analyzer-page__topbar">
+        <TransportControls />
+        <TempoControl detectedBpm={song.detectedBpm} />
+        <MicSelector />
+        <RecordButton />
+      </div>
+
       <div className="analyzer-page__body">
         <div className="analyzer-page__stems">
           <StemView song={song} />
@@ -55,13 +62,6 @@ function AnalyzerPage({ songId, onBack }: AnalyzerPageProps) {
 
         <div className="analyzer-page__takes">
           <TakeList />
-        </div>
-
-        <div className="analyzer-page__footer">
-          <TransportControls />
-          <TempoControl detectedBpm={song.detectedBpm} />
-          <MicSelector />
-          <RecordButton />
         </div>
       </div>
     </div>
