@@ -10,6 +10,23 @@ let recorder: VocalRecorder | null = null;
 let recordingStartPos = 0;
 // Round-trip latency (output + input) measured at rec.start(); applied in stopRecording.
 let _recordingLatencyS = 0;
+// Takes shorter than this carry too little accumulated drift to be worth logging.
+const DRIFT_CHECK_MIN_TAKE_S = 90;
+
+export interface CalibrationEntry {
+  offset: number; // ms
+  // Set when a device-change event removed a device this calibration depends on.
+  // Stale entries are kept (never deleted) but skipped at recording time.
+  stale?: boolean;
+  // Median absolute deviation of the clap measurements; absent for manual/legacy entries.
+  madMs?: number;
+  // Output device active during calibration. Unused here — SPS's calibration plays
+  // through the default output — but kept schema-compatible with VPS.
+  outputDeviceId?: string;
+}
+
+let _deviceWatcherInit = false;
+let _knownDeviceIds: Set<string> | null = null;
 
 export function getEngine(): AudioEngine {
   if (!engine) engine = new AudioEngine();
@@ -21,12 +38,36 @@ function getRecorder(): VocalRecorder {
   return recorder;
 }
 
-function _loadOffsets(): Record<string, number> {
+function _loadOffsets(): Record<string, CalibrationEntry> {
   try {
-    return JSON.parse(localStorage.getItem("songpracticestudio_recording_offsets") ?? "{}") as Record<string, number>;
+    const raw = JSON.parse(localStorage.getItem("songpracticestudio_recording_offsets") ?? "{}") as Record<string, unknown>;
+    const offsets: Record<string, CalibrationEntry> = {};
+    for (const [deviceId, value] of Object.entries(raw)) {
+      // Legacy schema stored a plain number per device.
+      if (typeof value === "number") {
+        offsets[deviceId] = { offset: value };
+      } else if (
+        value !== null &&
+        typeof value === "object" &&
+        typeof (value as CalibrationEntry).offset === "number"
+      ) {
+        offsets[deviceId] = value as CalibrationEntry;
+      } else {
+        console.warn("[settings] Dropping malformed recording offset entry:", deviceId, value);
+      }
+    }
+    return offsets;
   } catch (e) {
     console.warn("[settings] Could not load recording offsets:", e);
     return {};
+  }
+}
+
+function _persistOffsets(offsets: Record<string, CalibrationEntry>): void {
+  try {
+    localStorage.setItem("songpracticestudio_recording_offsets", JSON.stringify(offsets));
+  } catch (e) {
+    console.warn("[settings] Could not persist recording offsets:", e);
   }
 }
 
@@ -54,8 +95,11 @@ interface PlayerState {
   takes: Take[];
   activeTakeId: string | null;
   takeVolume: number;
-  // Per-device manual recording latency offset (ms), persisted to localStorage
-  recordingOffsets: Record<string, number>;
+  // Per-device recording latency calibration, persisted to localStorage
+  recordingOffsets: Record<string, CalibrationEntry>;
+  // True when the last startRecording used the AudioContext estimate because the
+  // stored calibration was missing or stale.
+  usedLatencyFallback: boolean;
 }
 
 interface PlayerActions {
@@ -79,6 +123,7 @@ interface PlayerActions {
   fetchAudioDevices: () => Promise<void>;
   setAudioDevice: (deviceId: string | null) => void;
   setRecordingOffset: (deviceId: string, offsetMs: number) => void;
+  applyCalibration: (deviceId: string, entry: CalibrationEntry) => void;
   // Playback output device actions
   fetchOutputDevices: () => Promise<void>;
   setOutputDevice: (deviceId: string | null) => Promise<void>;
@@ -193,6 +238,7 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => 
   activeTakeId: null,
   takeVolume: 1.0,
   recordingOffsets: _loadOffsets(),
+  usedLatencyFallback: false,
 
   loadSong: async (song, containers) => {
     const eng = getEngine();
@@ -343,6 +389,51 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => 
     }
     const devices = await navigator.mediaDevices.enumerateDevices();
     set({ audioDevices: devices.filter((d) => d.kind === "audioinput") });
+    _knownDeviceIds = new Set(devices.map((d) => d.deviceId));
+
+    if (!_deviceWatcherInit) {
+      _deviceWatcherInit = true;
+      navigator.mediaDevices.addEventListener("devicechange", () => {
+        void (async () => {
+          const current = await navigator.mediaDevices.enumerateDevices();
+          const currentIds = new Set(current.map((d) => d.deviceId));
+          const prev = _knownDeviceIds;
+          _knownDeviceIds = currentIds;
+          // devicechange also fires for irrelevant changes (e.g. default-device
+          // switches) — only act when the enumerated set actually differs.
+          if (
+            prev !== null &&
+            prev.size === currentIds.size &&
+            [...prev].every((id) => currentIds.has(id))
+          ) {
+            return;
+          }
+
+          set({
+            audioDevices: current.filter((d) => d.kind === "audioinput"),
+            outputDevices: current.filter((d) => d.kind === "audiooutput"),
+          });
+
+          const offsets = { ...get().recordingOffsets };
+          let changed = false;
+          for (const [inputId, entry] of Object.entries(offsets)) {
+            if (entry.stale) continue;
+            // "" is the default-microphone key, never present in enumerated ids.
+            const inputGone = inputId !== "" && !currentIds.has(inputId);
+            const outputGone = entry.outputDeviceId !== undefined && !currentIds.has(entry.outputDeviceId);
+            if (inputGone || outputGone) {
+              offsets[inputId] = { ...entry, stale: true };
+              changed = true;
+            }
+          }
+          if (changed) {
+            set({ recordingOffsets: offsets });
+            _persistOffsets(offsets);
+            console.warn("[calibration] audio device set changed — affected calibrations marked stale");
+          }
+        })().catch((e: unknown) => console.warn("[calibration] devicechange handling failed:", e));
+      });
+    }
   },
 
   setAudioDevice: (deviceId) => {
@@ -350,13 +441,17 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => 
   },
 
   setRecordingOffset: (deviceId, offsetMs) => {
-    const offsets = { ...get().recordingOffsets, [deviceId]: offsetMs };
+    // A hand-typed value has no measured confidence — store it bare, which also
+    // clears any stale flag from a previous calibration.
+    const offsets = { ...get().recordingOffsets, [deviceId]: { offset: offsetMs } };
     set({ recordingOffsets: offsets });
-    try {
-      localStorage.setItem("songpracticestudio_recording_offsets", JSON.stringify(offsets));
-    } catch (e) {
-      console.warn("[settings] Could not persist recording offsets:", e);
-    }
+    _persistOffsets(offsets);
+  },
+
+  applyCalibration: (deviceId, entry) => {
+    const offsets = { ...get().recordingOffsets, [deviceId]: entry };
+    set({ recordingOffsets: offsets });
+    _persistOffsets(offsets);
   },
 
   fetchOutputDevices: async () => {
@@ -404,11 +499,18 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => 
     rec.start();
 
     // Calibrated value takes full priority — skip AudioContext measurement when present.
-    const deviceOffsetMs = get().recordingOffsets[get().selectedDeviceId ?? ""] ?? 0;
-    if (deviceOffsetMs > 0) {
-      _recordingLatencyS = deviceOffsetMs / 1000;
-      console.log("[recording] using calibrated compensation:", deviceOffsetMs, "ms");
+    // Stale entries (a device they were measured with disappeared) are not trusted.
+    const calib = get().recordingOffsets[get().selectedDeviceId ?? ""];
+    const calibUsable = calib !== undefined && calib.offset > 0 && !calib.stale;
+    if (calibUsable) {
+      set({ usedLatencyFallback: false });
+      _recordingLatencyS = calib.offset / 1000;
+      console.log("[recording] using calibrated compensation:", calib.offset, "ms");
     } else {
+      if (calib !== undefined && calib.offset > 0) {
+        console.warn("[recording] stored calibration is stale — falling back to AudioContext estimate");
+      }
+      set({ usedLatencyFallback: true });
       // No calibration: fall back to AudioContext round-trip estimate.
       try {
         const latencyCtx = new AudioContext();
@@ -431,6 +533,7 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => 
 
     const rec = getRecorder();
     const eng = getEngine();
+    const takeDurationS = eng.getCurrentTime() - recordingStartPos;
     eng.stop();
     eng.setInteract(true);
 
@@ -454,6 +557,14 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => 
       const compensatedStartPos = Math.max(0, rawCompensated);
       const audioOffset = rawCompensated < 0 ? -rawCompensated : 0;
       const take = await saveTake(song.id, audioData, compensatedStartPos, audioOffset);
+
+      // Instrumentation only: correlate future misalignment reports with take length
+      // before deciding whether within-take clock drift is worth correcting.
+      if (takeDurationS > DRIFT_CHECK_MIN_TAKE_S) {
+        console.info(
+          `[drift-check] takeDuration=${takeDurationS.toFixed(1)}s input=${get().selectedDeviceId ?? "default"} output=${get().selectedOutputDeviceId ?? "default"}`,
+        );
+      }
 
       set((state) => ({
         isSavingTake: false,
