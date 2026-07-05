@@ -25,6 +25,10 @@ export class AudioEngine {
   private _rafId: number | null = null;
   private _lastNotifyTime = 0;
 
+  // Remembered so newly-created WaveSurfer instances (new song load, new take
+  // load) inherit the user's choice instead of defaulting to the system output.
+  private _outputDeviceId = "";
+
   // Recorded take — separate from the stems map since its duration/start
   // position can differ from the shared song timeline (e.g. punch-in takes).
   private _take: WaveSurfer | null = null;
@@ -62,6 +66,9 @@ export class AudioEngine {
         interact: true,
       });
       this._stems.set(name, ws);
+      ws.setSinkId(this._outputDeviceId).catch((e: unknown) =>
+        console.warn(`[engine] setSinkId failed for stem "${name}":`, e)
+      );
 
       return new Promise<void>((resolve, reject) => {
         ws.on("ready", () => resolve());
@@ -147,6 +154,7 @@ export class AudioEngine {
   }
 
   async setOutputDevice(deviceId: string): Promise<void> {
+    this._outputDeviceId = deviceId;
     await Promise.all([
       ...[...this._stems.values()].map((ws) => ws.setSinkId(deviceId)),
       ...(this._take ? [this._take.setSinkId(deviceId)] : []),
@@ -180,6 +188,9 @@ export class AudioEngine {
       normalize: true,
       interact: true,
     });
+    this._take.setSinkId(this._outputDeviceId).catch((e: unknown) =>
+      console.warn("[engine] setSinkId failed for take:", e)
+    );
 
     await new Promise<void>((resolve, reject) => {
       const unsubReady = this._take!.on("ready", () => { unsubReady(); unsubError(); resolve(); });

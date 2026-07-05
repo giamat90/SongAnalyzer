@@ -1,6 +1,7 @@
-import type { RefCallback } from "react";
+import { useState, type RefCallback } from "react";
 import { usePlayerStore, TAKE_TRACK_KEY } from "../../stores/player";
-import type { Take } from "../../lib/types";
+import { exportTake } from "../../lib/tauri";
+import type { Song, Take } from "../../lib/types";
 
 function PunchOverlay() {
   const punchIn  = usePlayerStore((s) => s.punchIn);
@@ -20,10 +21,11 @@ function PunchOverlay() {
 
 interface TakeTrackProps {
   take: Take;
+  song: Song;
   containerRef: RefCallback<HTMLDivElement>;
 }
 
-function TakeTrack({ take, containerRef }: TakeTrackProps) {
+function TakeTrack({ take, song, containerRef }: TakeTrackProps) {
   const volume        = usePlayerStore((s) => s.takeVolume);
   const setTakeVolume  = usePlayerStore((s) => s.setTakeVolume);
   const isMuted        = usePlayerStore((s) => !!s.mutedStems[TAKE_TRACK_KEY]);
@@ -31,11 +33,25 @@ function TakeTrack({ take, containerRef }: TakeTrackProps) {
   const isSoloed       = soloedStem === TAKE_TRACK_KEY;
   const toggleMute     = usePlayerStore((s) => s.toggleMute);
   const toggleSolo     = usePlayerStore((s) => s.toggleSolo);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const label = take.name || "Take";
+
+  const handleDownload = async () => {
+    setIsExporting(true);
+    try {
+      await exportTake(take.filepath, `${song.title} - ${label}.wav`);
+    } catch (e) {
+      console.error("[TakeTrack] export failed:", e);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
     <div className="stem-track">
       <div className="stem-track__header">
-        <span className="stem-track__label waveform__label--take">🎙 {take.name || "Take"}</span>
+        <span className="stem-track__label waveform__label--take">🎙 {label}</span>
         <div className="stem-track__controls">
           <button
             className={`stem-track__mute${isMuted ? " stem-track__mute--on" : ""}`}
@@ -61,6 +77,14 @@ function TakeTrack({ take, containerRef }: TakeTrackProps) {
             className="stem-track__volume"
             title="Take volume"
           />
+          <button
+            className="stem-track__download"
+            onClick={handleDownload}
+            disabled={isExporting}
+            title={`Download ${label}`}
+          >
+            {isExporting ? "…" : "↓"}
+          </button>
         </div>
       </div>
       <div className="stem-track__body waveform__take-rail">

@@ -77,6 +77,7 @@ function StemView({ song }: StemViewProps) {
       {activeTake && (
         <TakeTrack
           take={activeTake}
+          song={song}
           containerRef={(el) => { takeRef.current = el; }}
         />
       )}
