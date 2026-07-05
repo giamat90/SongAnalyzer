@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import DropZone from "../components/upload/DropZone";
 import YouTubeImport from "../components/upload/YouTubeImport";
+import StemPicker, { DEFAULT_STEMS } from "../components/upload/StemPicker";
 import RecordingOffsetControl from "../components/recording/RecordingOffsetControl";
-import type { Song } from "../lib/types";
+import type { Song, StemName } from "../lib/types";
 import { useLibraryStore } from "../stores/library";
 
 interface LibraryPageProps {
@@ -60,9 +61,12 @@ function LibraryPage({ onSelectSong }: LibraryPageProps) {
   const deleteSong          = useLibraryStore((s) => s.deleteSong);
   const clearError          = useLibraryStore((s) => s.clearError);
   const initProgressListener = useLibraryStore((s) => s.initProgressListener);
+  const isProcessing = useLibraryStore((s) => s.processing !== null);
   const [showSettings, setShowSettings] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [appVersion, setAppVersion] = useState("");
+  const [stems, setStems] = useState<StemName[]>(DEFAULT_STEMS);
+  const [highQuality, setHighQuality] = useState(false);
 
   useEffect(() => {
     fetchSongs();
@@ -115,8 +119,17 @@ function LibraryPage({ onSelectSong }: LibraryPageProps) {
       )}
 
       <div className="library-page__import">
-        <DropZone />
-        <YouTubeImport />
+        <StemPicker
+          value={stems}
+          onChange={setStems}
+          highQuality={highQuality}
+          onHighQualityChange={setHighQuality}
+          disabled={isProcessing}
+        />
+        <div className="library-page__import-sources">
+          <DropZone stems={stems} highQuality={highQuality} />
+          <YouTubeImport stems={stems} highQuality={highQuality} />
+        </div>
       </div>
 
       {showSettings && (

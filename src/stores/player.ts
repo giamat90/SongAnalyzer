@@ -200,19 +200,32 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => 
     eng.onTimeUpdate((time) => {
       set({ currentTime: time, isPlaying: eng.isPlaying });
       const s = get();
-      if (s.punchOut !== null && time >= s.punchOut && s.isPlaying) {
-        if (s.punchLoop && s.punchIn !== null) {
-          eng.seekTo(s.punchIn);
-          set({ currentTime: s.punchIn });
-        } else {
-          eng.pause();
-          const backTo = s.punchIn ?? 0;
-          eng.seekTo(backTo);
-          set({ isPlaying: false, currentTime: backTo });
+      if (s.punchOut !== null && time >= s.punchOut) {
+        if (s.isRecording) {
+          s.stopRecording().catch((e: unknown) =>
+            console.error("[player] punch-out auto-stop failed:", e)
+          );
+        } else if (s.isPlaying) {
+          if (s.punchLoop && s.punchIn !== null) {
+            eng.seekTo(s.punchIn);
+            set({ currentTime: s.punchIn });
+          } else {
+            eng.pause();
+            const backTo = s.punchIn ?? 0;
+            eng.seekTo(backTo);
+            set({ isPlaying: false, currentTime: backTo });
+          }
         }
       }
     });
-    eng.onFinish(() => set({ isPlaying: false }));
+    eng.onFinish(() => {
+      set({ isPlaying: false });
+      if (get().isRecording) {
+        get().stopRecording().catch((e: unknown) =>
+          console.error("[player] auto-stop recording failed:", e)
+        );
+      }
+    });
     const initialVolumes = Object.fromEntries(song.stems.map((n) => [n, 1.0]));
     set({
       song,

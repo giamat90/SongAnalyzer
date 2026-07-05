@@ -1,19 +1,21 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useLibraryStore } from "../../stores/library";
-import StemPicker, { DEFAULT_STEMS } from "./StemPicker";
 import type { StemName } from "../../lib/types";
 
 const AUDIO_EXTENSIONS = ["mp3", "wav", "flac", "ogg", "m4a", "aac", "wma"];
 
-function DropZone() {
+interface DropZoneProps {
+  stems:       StemName[];
+  highQuality: boolean;
+}
+
+function DropZone({ stems, highQuality }: DropZoneProps) {
   const uploadSong   = useLibraryStore((s) => s.uploadSong);
   const processing   = useLibraryStore((s) => s.processing);
   const isProcessing = processing !== null;
 
-  const [pendingFile,  setPendingFile]  = useState<string | null>(null);
-  const [stems,        setStems]        = useState<StemName[]>(DEFAULT_STEMS);
-  const [highQuality,  setHighQuality]  = useState(false);
+  const [pendingFile, setPendingFile] = useState<string | null>(null);
 
   const handleClick = async () => {
     if (isProcessing || pendingFile) return;
@@ -28,14 +30,10 @@ function DropZone() {
     if (!pendingFile) return;
     uploadSong(pendingFile, stems, highQuality);
     setPendingFile(null);
-    setStems(DEFAULT_STEMS);
-    setHighQuality(false);
   };
 
   const handleCancel = () => {
     setPendingFile(null);
-    setStems(DEFAULT_STEMS);
-    setHighQuality(false);
   };
 
   if (isProcessing) {
@@ -63,12 +61,6 @@ function DropZone() {
       <div className="dropzone dropzone--pending">
         <div className="dropzone__pending">
           <div className="dropzone__pending-name" title={pendingFile}>{fileName}</div>
-          <StemPicker
-            value={stems}
-            onChange={setStems}
-            highQuality={highQuality}
-            onHighQualityChange={setHighQuality}
-          />
           <div className="dropzone__pending-actions">
             <button className="dropzone__btn-cancel" type="button" onClick={handleCancel}>
               Cancel

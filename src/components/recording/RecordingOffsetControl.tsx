@@ -123,7 +123,7 @@ function RecordingOffsetControl() {
       });
     } catch (e) {
       console.error("[calibration] getUserMedia failed:", e);
-      setErrorMsg("Microphone unavailable: " + (e instanceof Error ? e.message : String(e)));
+      setErrorMsg("Audio input unavailable: " + (e instanceof Error ? e.message : String(e)));
       setPhase("error");
       return;
     }
@@ -193,7 +193,7 @@ function RecordingOffsetControl() {
 
         const measured = detectLatencyMs(audioBuf);
         if (measured === null || measured < 0) {
-          setErrorMsg("Could not detect claps — clap clearly on each click and try again.");
+          setErrorMsg("Could not detect a clear sound — clap, tap, or pluck sharply on each click and try again.");
           setPhase("error");
         } else {
           setResult(measured);
@@ -240,7 +240,9 @@ function RecordingOffsetControl() {
         <>
           <p className="rec-offset__hint">
             Compensation applied per device before saving each take (0 = auto-detected ~20 ms).
-            Use <strong>Calibrate</strong> to measure automatically.
+            Use <strong>Calibrate</strong> to measure automatically — clap, tap the mic, or pluck
+            a string on each click; any sharp, loud sound works, so this also suits instrument
+            inputs with no mic attached.
           </p>
           <div className="rec-offset__list">
             {devices.map((d) => (
@@ -311,13 +313,13 @@ function RecordingOffsetControl() {
           </p>
           {phase === "counting" && (
             <>
-              <p className="rec-offset__active-label">Count-in — get ready to clap</p>
+              <p className="rec-offset__active-label">Count-in — get ready to make a sharp sound (clap, tap, or pluck)</p>
               <div className="rec-offset__active-count">{countdown}</div>
             </>
           )}
           {phase === "measuring" && (
             <>
-              <p className="rec-offset__active-label">Clap in time with each click!</p>
+              <p className="rec-offset__active-label">Clap, tap, or pluck in time with each click!</p>
               <div className="rec-offset__active-count">
                 {measuredCount}
                 <span className="rec-offset__active-total"> / {N_MEASURED}</span>
@@ -325,7 +327,7 @@ function RecordingOffsetControl() {
             </>
           )}
           {phase === "analyzing" && (
-            <p className="rec-offset__active-label">Analyzing claps…</p>
+            <p className="rec-offset__active-label">Analyzing…</p>
           )}
           <button className="rec-offset__cancel-btn" onClick={cancel}>
             Cancel

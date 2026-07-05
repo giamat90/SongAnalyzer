@@ -1,15 +1,17 @@
 import { useState } from "react";
 import { useLibraryStore } from "../../stores/library";
-import StemPicker, { DEFAULT_STEMS } from "./StemPicker";
 import type { StemName } from "../../lib/types";
 
 const YT_PATTERN = /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//;
 
-function YouTubeImport() {
-  const [url,         setUrl]         = useState("");
-  const [stems,       setStems]       = useState<StemName[]>(DEFAULT_STEMS);
-  const [highQuality, setHighQuality] = useState(false);
-  const [error,       setError]       = useState<string | null>(null);
+interface YouTubeImportProps {
+  stems:       StemName[];
+  highQuality: boolean;
+}
+
+function YouTubeImport({ stems, highQuality }: YouTubeImportProps) {
+  const [url,   setUrl]   = useState("");
+  const [error, setError] = useState<string | null>(null);
   const importYoutube = useLibraryStore((s) => s.importYoutube);
   const isProcessing  = useLibraryStore((s) => s.processing !== null);
 
@@ -21,8 +23,6 @@ function YouTubeImport() {
     setError(null);
     await importYoutube(url, stems, highQuality);
     setUrl("");
-    setStems(DEFAULT_STEMS);
-    setHighQuality(false);
   };
 
   return (
@@ -45,13 +45,6 @@ function YouTubeImport() {
           Import
         </button>
       </div>
-      <StemPicker
-        value={stems}
-        onChange={setStems}
-        highQuality={highQuality}
-        onHighQualityChange={setHighQuality}
-        disabled={isProcessing}
-      />
       {error && <p className="yt-import__error">{error}</p>}
     </div>
   );
