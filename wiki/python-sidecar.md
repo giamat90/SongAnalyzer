@@ -1,6 +1,6 @@
 # Python Sidecar
 
-**Files:** `sidecar/main.py` · `sidecar/processor.py` · `sidecar/yt_importer.py` · `sidecar/build.py`
+**Files:** `sidecar/main.py` · `sidecar/processor.py` · `sidecar/recording.py` · `sidecar/yt_importer.py` · `sidecar/build.py`
 
 ## Role
 
@@ -9,6 +9,8 @@ The Python sidecar handles computationally heavy audio processing:
 - **Stem separation** — split a mixed audio file into up to 6 instrument stems via Demucs
 - **BPM detection** — estimate tempo from the full mix
 - **Key detection** — estimate musical key via chromagram
+- **Take post-processing** — WAV conversion and RMS loudness normalization of recordings (`recording.py`)
+- **Mixdown rendering** — sum tracks with per-source gain over a time window (`mix_export`)
 
 ## IPC Protocol
 
@@ -57,8 +59,10 @@ Rust sends one command at a time (the sidecar processes synchronously):
 Separates a mixed audio file and extracts BPM and key.
 
 ```json
-{"cmd": "process", "filePath": "/path/to/song.mp3", "outputDir": "/path/to/output/"}
+{"cmd": "process", "filePath": "/path/to/song.mp3", "outputDir": "/path/to/output/", "stemsToExtract": ["vocals", "drums"], "highQuality": false}
 ```
+
+`stemsToExtract` (optional) — subset of stems to write; drives smart model selection. `highQuality` (optional, default `false`) — cascaded high-quality separation mode.
 
 Steps (`processor.py`):
 1. Demucs `htdemucs_6s` → writes `vocals.wav`, `drums.wav`, `bass.wav`, `guitar.wav`, `piano.wav`, `other.wav` (progress 0→0.78)
@@ -82,6 +86,32 @@ Implemented in `yt_importer.py` via `yt-dlp`. Steps:
 Returns the same dict as `process`, with `"title"` added (from yt-dlp metadata).
 
 **Bot-detection fallback:** first attempt uses no cookies. If YouTube returns a bot-check error, retries with `cookiesfrombrowser` cycling through Chrome → Firefox → Edge → Brave → Opera. Any other error (private video, bad URL, network failure) raises immediately. Partial output files are cleaned up between attempts.
+
+### `convert_take`
+
+Decodes a take (webm/opus) via `librosa.load` and writes a WAV via `soundfile` — used by `export_take` so exported takes are always WAV.
+
+```json
+{"cmd": "convert_take", "recordingPath": "/path/to/take.webm", "outputPath": "/path/to/out.wav"}
+```
+
+### `normalize_take`
+
+RMS-normalizes a recording's loudness against a reference stem (in practice `vocals.wav`), peak-capped so nothing clips, and writes the result as WAV (implemented in `recording.py`). Called by Rust's `save_take`; the normalized `{takeId}.wav` replaces the raw `.webm` on disk. This is why recorded takes match the mastered Demucs stems' loudness.
+
+```json
+{"cmd": "normalize_take", "recordingPath": "/path/to/take.webm", "outputPath": "/path/to/take.wav", "referencePath": "/path/to/vocals.wav", "audioOffset": 0.0}
+```
+
+### `mix_export`
+
+Renders a single mixdown WAV from a list of sources, honoring the frontend's live mute/solo/volume state and the punch/loop region (implemented in `recording.py`).
+
+```json
+{"cmd": "mix_export", "sources": [{"path": "...", "gain": 0.8, "isTake": false}, {"path": "...", "gain": 1.0, "isTake": true, "startPosition": 12.5, "audioOffset": 0.25}], "startSec": 10.0, "endSec": 42.0, "outputPath": "/path/to/mix.wav"}
+```
+
+Each source is loaded only over the `[startSec, endSec)` window; takes are aligned via `fileTime = projectTime - startPosition + audioOffset`. Sources are resampled/upmixed to a common rate and channel count, summed with per-source gain, then peak-safe scaled before writing.
 
 ### `ping` / `quit`
 

@@ -9,13 +9,23 @@ App
 ├── LibraryPage
 │   ├── DropZone           — drag-and-drop audio file import
 │   ├── YouTubeImport      — paste-and-import YouTube URL
-│   └── SongCard           — song list item with stem count + delete
-└── AnalyzerPage
-    ├── StemView            — orchestrates TimeRuler + all StemTracks; loads AudioEngine
-    │   ├── TimeRuler       — canvas time ruler with drag-to-select loop region
-    │   └── StemTrack (×N) — one row per stem: waveform + volume slider + download button
-    ├── TransportControls   — play/pause/stop + current time display
-    └── TempoControl        — playback rate slider (0.5–2.0×)
+│   ├── SongCard           — song list item with stem count + delete
+│   └── About modal        — version/info dialog
+├── AnalyzerPage
+│   ├── topbar (fixed)
+│   │   ├── TransportControls  — play/pause/stop + current time display
+│   │   ├── TempoControl       — BPM-first speed control
+│   │   ├── MicSelector        — microphone input picker
+│   │   ├── OutputSelector     — audio output device picker (ported from VPS)
+│   │   └── RecordButton       — start/stop recording
+│   ├── StemView            — orchestrates TimeRuler + all StemTracks + TakeTrack; loads AudioEngine
+│   │   ├── TimeRuler       — canvas time ruler with drag-to-select punch/loop region
+│   │   ├── StemTrack (×N)  — one row per stem: waveform + mute/solo + volume + download button
+│   │   ├── TakeTrack       — recorded take row, aligned at its startPosition
+│   │   └── ExportMixButton — render the audible mix (mute/solo/volume/punch) to WAV
+│   └── TakeList            — take list with select/rename/delete
+│       └── RecordingOffsetControl — per-device latency calibration wizard
+└── UpdateDialog            — auto-update modal (tauri-plugin-updater)
 ```
 
 ## State Management
@@ -54,9 +64,19 @@ const togglePlay = usePlayerStore((s) => s.togglePlay);
 | `duration` | `number` | Song length (seconds) |
 | `playbackRate` | `number` | Speed multiplier (0.5–2.0) |
 | `stemVolumes` | `Record<string, number>` | Per-stem volume 0–1 (all default 1.0) |
+| `mutedStems` | `Record<string, boolean>` | Per-stem mute toggles |
+| `soloedStem` | `string \| null` | Currently soloed stem (mutes all others) |
 | `punchIn` | `number \| null` | Loop region start (seconds) |
 | `punchOut` | `number \| null` | Loop region end (seconds) |
 | `punchLoop` | `boolean` | Loop the region during playback |
+| `audioDevices` / `selectedDeviceId` | | Microphone enumeration + selection |
+| `outputDevices` / `selectedOutputDeviceId` | | Output device enumeration + selection |
+| `isRecording` / `isSavingTake` | `boolean` | Recording lifecycle flags |
+| `takes` / `activeTakeId` / `takeVolume` | | Recorded takes + active selection |
+| `recordingOffsets` | `Record<string, CalibrationEntry>` | Per-device latency calibration `{ offset, stale?, madMs? }`, localStorage-backed |
+| `usedLatencyFallback` | `boolean` | True when recording started without a usable calibration |
+
+See [Recording Flow](recording-flow.md) for the recording state machine and latency compensation.
 
 ## GUI Rule
 
@@ -66,14 +86,34 @@ const togglePlay = usePlayerStore((s) => s.togglePlay);
 
 ### StemView
 
-Mounts/destroys the `AudioEngine` whenever `song.id` changes. Iterates `song.stems` and renders one `StemTrack` per stem. Also renders `TimeRuler` at the top.
+Mounts/destroys the `AudioEngine` whenever `song.id` changes. Iterates `song.stems` and renders one `StemTrack` per stem, plus a `TakeTrack` when a take is selected. Also renders `TimeRuler` at the top and the **Export Mix** button: `buildMixSources(state)` resolves one final linear gain per audible track from mute/solo/volume (plus the take with its `startPosition`/`audioOffset` alignment) and clamps the render window to the punch region; the `export_mix` Tauri command renders it via the sidecar `mix_export` and opens a native Save-As dialog.
 
 ### StemTrack
 
 Single stem row. Contains:
 - A WaveSurfer waveform container (wired to the engine via `engine.loadStem()`)
+- Mute (`M`) and solo (`S`) buttons wired to `toggleMute` / `toggleSolo` in the player store
 - A volume slider that calls `engine.setStemVolume(name, value)`
 - A download button that calls `exportStem(songId, stemName)` via a native Save-As dialog
+
+### TakeTrack
+
+Extra row rendered when `activeTakeId` is set. Loads the take into the engine via `loadTakeTrack(path, container, startOffset, audioOffset)` so it plays aligned at its `startPosition`; visually positioned/sized proportionally to the song timeline.
+
+### Recording components (`src/components/recording/`)
+
+- **RecordButton** — starts/stops recording via the player store; disabled until a song is loaded.
+- **MicSelector** — input device picker; devices get real labels only after the first `getUserMedia` grant.
+- **TakeList** — recorded takes with select/rename/delete; selecting a take mounts `TakeTrack`.
+- **RecordingOffsetControl** — click-clap latency calibration wizard writing `recordingOffsets` entries with MAD-based confidence; see [Recording Flow](recording-flow.md#latency-compensation).
+
+### OutputSelector
+
+Audio output device picker (ported from VPS). `fetchOutputDevices` / `setOutputDevice` in the player store; the engine re-routes every WaveSurfer instance (and newly created ones) via `setSinkId`.
+
+### UpdateDialog (`src/components/updater/`)
+
+Auto-update modal backed by `src/stores/updater.ts` and `tauri-plugin-updater`: release notes, download progress, install/restart.
 
 ### TimeRuler
 
@@ -85,7 +125,7 @@ Play/pause/stop buttons + current time display. Stop seeks to 0. Time is read fr
 
 ### TempoControl
 
-Slider from 0.5× to 2.0×. Calls `engine.setPlaybackRate(rate)` and persists the value in the player store.
+BPM-first speed control (ported from VPS): an editable BPM value (derived from `detectedBpm × playbackRate`) alongside an editable ×-rate, clamped to 0.5–2.0×. Calls `engine.setPlaybackRate(rate)` and persists the value in the player store.
 
 ### DropZone
 

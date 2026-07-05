@@ -19,6 +19,14 @@ Map {
 
 The **first stem loaded** (vocals if present, otherwise the first in the array) becomes the **master clock**: `getCurrentTime()`, `getDuration()`, and the `"finish"` event are all read from the master instance.
 
+## Take Track
+
+A recorded take loads as one extra WaveSurfer instance via `loadTakeTrack(filePath, container, startOffset, audioOffset)`. It is aligned to song time with `_takeOffset` / `_takeAudioOffset` (`fileTime = songTime - startOffset + audioOffset`, the same mapping VPS uses): the rAF tick auto-plays/pauses the take as the playhead enters/exits its window, and seeks convert between song time and file time. See [Recording Flow](recording-flow.md).
+
+## Output Device Routing
+
+`setOutputDevice(deviceId)` re-routes every existing instance via `setSinkId` and remembers the id so newly created stem/take instances are routed on creation too (a fresh instance otherwise defaults to the system device).
+
 ## Click-to-Seek Sync
 
 WaveSurfer's `"interaction"` event fires only on user clicks (not programmatic `seekTo`). When the user clicks any stem waveform, the engine converts the click position to an absolute time and calls `seekTo()` on all other instances. The `"interaction"` event (rather than the older `"seeking"`) avoids the infinite seek loop that arises when each `seekTo` would trigger another event.
@@ -42,6 +50,10 @@ Stem waveform colors are defined in `STEM_COLORS` at the top of `engine.ts`:
 | guitar | `rgba(255,140,30,0.85)` orange |
 | piano | `rgba(255,220,50,0.85)` yellow |
 | other | `rgba(160,160,160,0.85)` gray |
+
+## Volume, Mute, Solo
+
+Per-stem volume, mute, and solo resolve to one **effective gain** per instance in the player store's `effectiveStemGain(name, rawVolume, mutedStems, soloedStem)` (solo silences every other track including the take; mute zeroes that track), applied through `engine.setStemVolume` / `setTakeVolume` by `syncTrackVolumes`. The same helper is reused by `buildMixSources` when exporting a mixdown, so the exported WAV matches what is audible.
 
 ## Playback Rate
 

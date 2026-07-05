@@ -19,6 +19,22 @@ interface Song {
 }
 ```
 
+### Take
+
+```ts
+interface Take {
+  id: string;
+  songId: string;
+  recordedAt: string;     // ISO timestamp
+  filepath: string;       // RMS-normalized .wav (raw .webm only if normalization failed)
+  name?: string;          // user-assigned; UI falls back to "Take N"
+  startPosition: number;  // song time (seconds) where recording began; 0 for full-song takes
+  audioOffset?: number;   // seconds into the file to skip on playback (latency compensation overflow)
+}
+```
+
+Unlike VPS's `Take`, there are no analysis fields (`pitchData`, `vibrato`, …) — SPS does no take analysis.
+
 ### StemName
 
 ```ts
@@ -54,18 +70,27 @@ All data lives under `~/.songpracticestudio/` (`C:\Users\{user}\.songpracticestu
         ├── bass.wav       separated bass stem
         ├── guitar.wav     separated guitar stem
         ├── piano.wav      separated piano stem
-        └── other.wav      separated other/residual stem
+        ├── other.wav      separated other/residual stem
+        ├── takes.json     Take[] metadata
+        └── takes/
+            └── {takeId}.wav  RMS-normalized take audio (raw .webm kept only when normalization failed)
 ```
 
 ## Tauri Commands
 
 | Command | Arguments | Returns |
 |---------|-----------|---------|
-| `process_song` | `filePath: string` | `Song` |
-| `import_youtube` | `url: string` | `Song` |
+| `process_song` | `filePath: string, stemsToExtract?: StemName[], highQuality?: boolean` | `Song` |
+| `import_youtube` | `url: string, stemsToExtract?: StemName[], highQuality?: boolean` | `Song` |
 | `list_songs` | — | `Song[]` |
 | `delete_song` | `songId: string` | `void` |
-| `export_stem` | `songId, stemName: string` | `void` (native Save-As dialog) |
+| `save_take` | `songId, audioData: number[], startPosition: f64, audioOffset: f64` | `Take` (RMS-normalizes via sidecar `normalize_take`) |
+| `list_takes` | `songId: string` | `Take[]` |
+| `delete_take` | `songId, takeId: string` | `void` |
+| `rename_take` | `songId, takeId, name: string` | `Take` (empty/whitespace name resets to default) |
+| `export_stem` | `stemPath, suggestedName: string` | `void` (native Save-As dialog) |
+| `export_take` | `takePath, suggestedName: string` | `void` (always WAV; sidecar `convert_take` first) |
+| `export_mix` | `sources: MixSource[], startSec, endSec: f64, suggestedName: string` | `void` (sidecar `mix_export`, then Save-As) |
 
 All commands are async and return a `Promise`. Errors are thrown as strings.
 

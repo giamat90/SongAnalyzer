@@ -43,6 +43,16 @@ if (punchOut !== null && currentTime >= punchOut) {
 
 The region is drawn as a translucent red band on the `TimeRuler` canvas with I-beam caps at the In/Out handles. Each `StemTrack` also renders a `PunchOverlay` div positioned via `left`/`width` percentages of the track width, so the region is visible across all stem waveforms simultaneously.
 
+## Recording Lifecycle
+
+`startRecording` (player store): remembers the start position (`punchIn` if set, else `currentTime`), pauses playback, opens the mic via `rec.init(selectedDeviceId)` (`VocalRecorder` in `src/audio/recorder.ts`), seeks to the start position, resumes playback, then starts the `MediaRecorder`.
+
+The recorder builds a Web Audio **channel-fix graph** (channel splitter → per-channel max merge) before the `MediaRecorder`, because some 2-input USB interfaces route the mic to only one physical channel — without it a `channelCount: 1` downmix loses ~6 dB.
+
+**Auto-stop:** recording stops automatically when playback stops itself — the rAF `onTimeUpdate` handler calls `stopRecording()` at punch-out, and the `onFinish` handler does the same at song end — so the mic is never left running silently after the take should have ended.
+
+`stopRecording`: drains the `MediaRecorder`, releases the mic stream, applies latency compensation to `startPosition`/`audioOffset` (below), then `saveTake` writes the take via Tauri — where the sidecar `normalize_take` **RMS-matches the take's loudness against `vocals.wav`** (peak-capped) and the normalized `{takeId}.wav` replaces the raw `.webm`. Selecting the saved take mounts `TakeTrack`, which loads it into the engine aligned at its `startPosition`.
+
 ## Latency Compensation
 
 The player hears the stems with a monitoring delay (typically 50–300 ms on USB WASAPI interfaces). To compensate, the recorded audio's `startPosition` is shifted back by the measured round-trip latency in `stopRecording()`; if that pushes it below 0 the remainder is stored as `audioOffset` (seconds to skip into the take file).

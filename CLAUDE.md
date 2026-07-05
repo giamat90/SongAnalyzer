@@ -3,9 +3,9 @@
 ## What this project is
 
 A Tauri v2 + React + TypeScript + Python desktop app.  
-Drop any audio file (or paste a YouTube URL) → Demucs splits it into up to 6 instrument stems → multi-track player lets you listen, solo/mute via volume, loop a region, slow down, and download each stem as WAV.
+Drop any audio file (or paste a YouTube URL) → Demucs splits it into up to 6 instrument stems → multi-track player lets you listen, mute/solo/volume per stem, loop a region, slow down, record yourself over the mix (with latency compensation), export a mixdown of the live mix, and download each stem as WAV.
 
-Forked from **VPS** (`C:\Workspace\GiaMat90\VPS`) which is a vocal practice studio. Song Practice Studio strips all recording/analysis/coaching features and repurposes the infrastructure for stem separation.
+Forked from **VPS** (`C:\Workspace\GiaMat90\MPS\VPS`), a vocal practice studio. The fork originally stripped all recording/analysis/coaching features; **recording was later reimplemented** for the multi-stem context (commit `a9f0806`, v0.0.7) with its own latency-compensation model. Pitch analysis and coaching remain VPS-only.
 
 ---
 
@@ -13,7 +13,7 @@ Forked from **VPS** (`C:\Workspace\GiaMat90\VPS`) which is a vocal practice stud
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 18 + TypeScript (strict), Vite, Zustand |
+| Frontend | React 19 + TypeScript (strict), Vite, Zustand |
 | Desktop shell | Tauri v2 (Rust) |
 | Audio rendering | WaveSurfer.js (one instance per stem) |
 | Stem separation | Python sidecar via Demucs `htdemucs_6s` |
@@ -35,11 +35,13 @@ Replaces the fixed `vocals`/`instrumental`/`take` WaveSurfer trio with a dynamic
 - `interaction` events (user clicks only, not programmatic seeks) sync all other stems.
 - rAF tick at 60fps; store notifications throttled to ~30fps.
 - Loop logic lives in the tick: when `currentTime >= _loopEnd`, seeks to `_loopStart`.
+- A recorded take loads as one extra instance via `loadTakeTrack(path, container, startOffset, audioOffset)`, aligned to song time with `_takeOffset`/`_takeAudioOffset` (same mapping as VPS: `fileTime = songTime - startOffset + audioOffset`).
+- `setOutputDevice(deviceId)` re-routes every instance (and future ones) via `setSinkId`.
 
 ### Player store (`src/stores/player.ts`)
-`stemVolumes: Record<string, number>` holds per-stem volume (all default `1.0`).  
+`stemVolumes: Record<string, number>` per-stem volume, `mutedStems: Record<string, boolean>` and `soloedStem: string | null` for the per-stem mute/solo buttons.  
 Punch region state (`punchIn`, `punchOut`, `punchLoop`) is shared with the TimeRuler — same pattern as VPS.  
-No recording, no take, no transpose state.
+Recording state: `isRecording`, `isSavingTake`, `takes: Take[]`, `activeTakeId`, `takeVolume`, mic/output device selection, and `recordingOffsets: Record<string, CalibrationEntry>` (per-device latency calibration `{ offset, stale?, madMs? }`, localStorage-backed, with `usedLatencyFallback` set when recording starts without a usable calibration). Recording auto-stops when playback stops itself (punch-out or song end). No transpose state (VPS-only).
 
 ### Processing pipeline (`sidecar/processor.py`)
 Three stages:
@@ -64,6 +66,20 @@ interface Song {
 ```
 Persisted in `~/.songpracticestudio/library.json`; stem WAVs in `~/.songpracticestudio/library/{song_id}/` (managed by `src-tauri/src/storage.rs` + `library.rs`).
 
+### Take data model
+```typescript
+interface Take {
+  id: string;
+  songId: string;
+  recordedAt: string;
+  filepath: string;       // RMS-normalized .wav (raw .webm only if normalization failed)
+  name?: string;          // user-assigned; UI falls back to "Take N"
+  startPosition: number;  // song time (s) where recording began; 0 = full-song
+  audioOffset?: number;   // seconds into the file to skip (latency compensation overflow)
+}
+```
+Persisted in `takes.json` inside the song directory; audio in `takes/{takeId}.wav`. At save time the Rust `save_take` command calls the sidecar `normalize_take` to RMS-match the take's loudness against `vocals.wav` (peak-capped).
+
 ---
 
 ## Project structure
@@ -73,32 +89,44 @@ SongPracticeStudio/
 ├── sidecar/
 │   ├── processor.py      ← Demucs 6s + BPM + key; main pipeline
 │   ├── yt_importer.py    ← yt-dlp download → processor.process()
-│   ├── main.py           ← JSON-lines command dispatcher (process, import_yt, convert_take, mix_export, ping, quit)
-│   ├── recording.py      ← take WAV conversion (convert_take_to_wav) + mixdown rendering (mix_export)
+│   ├── main.py           ← JSON-lines command dispatcher (process, import_yt, convert_take, normalize_take, mix_export, ping, quit)
+│   ├── recording.py      ← take WAV conversion (convert_take_to_wav), RMS loudness normalization (normalize_take), mixdown rendering (mix_export)
 │   └── requirements.txt
 ├── src/
-│   ├── audio/engine.ts         ← AudioEngine: dynamic stems Map, rAF loop
-│   ├── stores/player.ts        ← Zustand: stemVolumes, punch region, transport
-│   ├── stores/library.ts       ← Zustand: song list, upload/import, progress
-│   ├── lib/types.ts            ← Song, StemName, ProcessingStatus
-│   ├── lib/tauri.ts            ← IPC wrappers: processSong, listSongs, deleteSong, importYoutube, exportStem
+│   ├── audio/
+│   │   ├── engine.ts           ← AudioEngine: dynamic stems Map + take instance, rAF loop
+│   │   └── recorder.ts         ← VocalRecorder (MediaRecorder wrapper, Web Audio channel-fix graph)
+│   ├── stores/
+│   │   ├── player.ts           ← Zustand: stemVolumes/mute/solo, punch region, transport, recording, latency calibration
+│   │   ├── library.ts          ← Zustand: song list, upload/import, progress
+│   │   └── updater.ts          ← Zustand: auto-update state (tauri-plugin-updater)
+│   ├── lib/types.ts            ← Song, StemName, Take, ProcessingStatus
+│   ├── lib/tauri.ts            ← IPC wrappers: processSong, listSongs, saveTake, exportStem, exportMix, …
 │   ├── components/
 │   │   ├── player/
-│   │   │   ├── StemView.tsx       ← TimeRuler + all StemTracks; loads engine on song.id change
-│   │   │   ├── StemTrack.tsx      ← Single stem row: waveform + volume + download button
+│   │   │   ├── StemView.tsx       ← TimeRuler + all StemTracks + TakeTrack + Export Mix button
+│   │   │   ├── StemTrack.tsx      ← Single stem row: waveform + mute/solo/volume + download button
+│   │   │   ├── TakeTrack.tsx      ← Recorded take row, aligned at its startPosition
 │   │   │   ├── TimeRuler.tsx      ← Canvas ruler with drag-to-create punch region
 │   │   │   ├── TransportControls.tsx  ← Play/pause/stop + time display
-│   │   │   ├── TempoControl.tsx   ← Speed slider (0.5–2.0x)
+│   │   │   ├── TempoControl.tsx   ← BPM-first speed control
 │   │   │   └── OutputSelector.tsx ← Audio output device picker (ported from VPS)
+│   │   ├── recording/
+│   │   │   ├── RecordButton.tsx   ← Start/stop recording
+│   │   │   ├── MicSelector.tsx    ← Microphone input picker
+│   │   │   ├── RecordingOffsetControl.tsx ← Latency calibration wizard (click-clap)
+│   │   │   └── TakeList.tsx       ← Take list with select/rename/delete
+│   │   ├── updater/
+│   │   │   └── UpdateDialog.tsx   ← Auto-update modal
 │   │   └── upload/
 │   │       ├── DropZone.tsx       ← File drag-and-drop → processSong
 │   │       └── YouTubeImport.tsx  ← URL paste → importYoutube
 │   ├── pages/
-│   │   ├── LibraryPage.tsx    ← Song list + import; SongCard shows stem count
+│   │   ├── LibraryPage.tsx    ← Song list + import + About modal; SongCard shows stem count
 │   │   └── AnalyzerPage.tsx   ← Header + StemView + transport/tempo footer
 │   └── App.tsx                ← Two-page router: library ↔ analyzer
 └── src-tauri/src/
-    ├── commands.rs   ← process_song, import_youtube, export_stem, export_take, export_mix, list_songs, delete_song
+    ├── commands.rs   ← process_song, import_youtube, export_stem, export_take, export_mix, save_take, list_takes, delete_take, rename_take, list_songs, delete_song
     ├── library.rs    ← Song struct (includes stems: Vec<String>), library.json CRUD
     └── lib.rs        ← Tauri builder, invoke_handler registration
 ```
@@ -168,21 +196,33 @@ cd sidecar && python build.py
 
 ---
 
-## What's NOT here (stripped from VPS)
+## Recording (reimplemented from the VPS concept, v0.0.7+)
 
-- Vocal recording (RecordButton, MicSelector, VocalRecorder, save_take)
-- Pitch analysis (PianoRoll, PianoKeyboard, DualTuner, analysis store)
-- Take playback and management (TakeList, loadTakeTrack)
+Recording exists here — do not trust older docs claiming otherwise. Key points (full detail in `wiki/recording-flow.md`):
+
+- `RecordButton` → `VocalRecorder` (`src/audio/recorder.ts`) with a Web Audio **channel-fix graph** (splits/max-merges input channels so 2-in interfaces that route the mic to one physical channel don't lose ~6 dB to a stereo→mono downmix).
+- Per-device **latency calibration** (`RecordingOffsetControl.tsx`, click-clap wizard): `recordingOffsets` entries `{ offset, stale?, madMs? }` with devicechange staleness invalidation, MAD-based confidence chip, 0–500 ms and ≥5/8-onset sanity bounds. Unlike VPS there is **no per-recording output routing**, so no `outputDeviceId` on calibration entries.
+- Recording **auto-stops** when playback stops itself (punch-out reached, or song end).
+- Takes are **RMS-normalized** against `vocals.wav` at save time (sidecar `normalize_take`).
+- Take plays back as an extra engine track aligned at `startPosition`/`audioOffset` (`TakeTrack.tsx`).
+
+---
+
+## What's NOT here (still VPS-only)
+
+- Pitch analysis (PianoRoll, PianoKeyboard, DualTuner, analysis store, SRH sidecar)
 - Coaching panel (CoachPanel)
 - Key transpose (KeyTranspose, pitch_shift_song)
 - Vibrato / timing / dynamics analysis cards
+- Short-Term Spectrum / spectrogram panels
+- Free Exercise mode (song-less recording)
+- Instrument-only import (`kind: "instrument"`, skips separation)
 
-If any of these are needed, refer to `C:\Workspace\GiaMat90\VPS` for the implementation.
+If any of these are needed, refer to `C:\Workspace\GiaMat90\MPS\VPS` for the implementation — and check `MPS/wiki/feature-parity.md` first for porting notes.
 
 ---
 
 ## Known open work
 
-- Solo/mute buttons per stem (not yet implemented — volume slider covers it for now)
 - The `guitar` icon in `StemTrack.tsx` reuses 🎸 for both guitar and bass; could differentiate
 - No waveform error UI per stem (only a top-level `stem-view__error` div)
