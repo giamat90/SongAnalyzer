@@ -23,6 +23,7 @@ pub fn run() {
             commands::delete_take,
             commands::rename_take,
             commands::export_take,
+            commands::export_mix,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

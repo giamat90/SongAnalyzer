@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { usePlayerStore, getEngine } from "../../stores/player";
+import { usePlayerStore, getEngine, buildMixSources } from "../../stores/player";
+import { exportMix } from "../../lib/tauri";
 import TimeRuler from "./TimeRuler";
 import StemTrack from "./StemTrack";
 import TakeTrack from "./TakeTrack";
@@ -7,6 +8,45 @@ import type { Song } from "../../lib/types";
 
 interface StemViewProps {
   song: Song;
+}
+
+function ExportMixButton() {
+  // Subscribe to every input buildMixSources reads, so the button's
+  // disabled state stays in sync with mute/solo/volume/take changes.
+  usePlayerStore((s) => s.song);
+  usePlayerStore((s) => s.stemVolumes);
+  usePlayerStore((s) => s.mutedStems);
+  usePlayerStore((s) => s.soloedStem);
+  usePlayerStore((s) => s.takeVolume);
+  usePlayerStore((s) => s.activeTakeId);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const mix = buildMixSources(usePlayerStore.getState());
+
+  const handleExport = async () => {
+    const state = usePlayerStore.getState();
+    const built = buildMixSources(state);
+    if (!built || !state.song) return;
+    setIsExporting(true);
+    try {
+      await exportMix(built.sources, built.startSec, built.endSec, `${state.song.title} - Mixdown.wav`);
+    } catch (e) {
+      console.error("[StemView] exportMix failed:", e);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  return (
+    <button
+      className="stem-view__export-mix"
+      onClick={() => void handleExport()}
+      disabled={!mix || isExporting}
+      title={mix ? "Export the currently audible mix as a WAV file" : "No audible tracks to export"}
+    >
+      {isExporting ? "Exporting…" : "Export Mix"}
+    </button>
+  );
 }
 
 function StemView({ song }: StemViewProps) {
@@ -66,6 +106,9 @@ function StemView({ song }: StemViewProps) {
     <div className="stem-view">
       {loadError && <div className="stem-view__error">{loadError}</div>}
       <TimeRuler />
+      <div className="stem-view__toolbar">
+        <ExportMixButton />
+      </div>
       {song.stems.map((name) => (
         <StemTrack
           key={name}

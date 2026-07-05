@@ -97,6 +97,19 @@ interface PlayerActions {
 // the rest — no stem is ever actually named this).
 export const TAKE_TRACK_KEY = "__take__";
 
+// Soloing a track silences every other track; muting silences only that
+// track. Neither ever overwrites the stored slider value.
+export function effectiveStemGain(
+  name: string,
+  rawVolume: number,
+  mutedStems: Record<string, boolean>,
+  soloedStem: string | null,
+): number {
+  if (soloedStem !== null) return name === soloedStem ? rawVolume : 0;
+  if (mutedStems[name]) return 0;
+  return rawVolume;
+}
+
 // Compute and push effective volume for every loaded stem, plus the take (if any).
 function applyEffectiveVolumes(
   eng: AudioEngine,
@@ -107,22 +120,55 @@ function applyEffectiveVolumes(
   takeVolume: number,
 ) {
   for (const name of stems) {
-    let vol = stemVolumes[name] ?? 1.0;
-    if (soloedStem !== null) {
-      vol = name === soloedStem ? vol : 0;
-    } else if (mutedStems[name]) {
-      vol = 0;
+    eng.setStemVolume(name, effectiveStemGain(name, stemVolumes[name] ?? 1.0, mutedStems, soloedStem));
+  }
+  eng.setTakeVolume(effectiveStemGain(TAKE_TRACK_KEY, takeVolume, mutedStems, soloedStem));
+}
+
+/**
+ * Build the source list for an "export mix" render from the current store
+ * state: one entry per stem/take with nonzero effective volume, resolved to
+ * the underlying file path (and take alignment fields, if applicable).
+ * Returns null if no track is currently audible.
+ */
+export function buildMixSources(state: PlayerState): {
+  sources: import("../lib/tauri").MixSource[];
+  startSec: number;
+  endSec: number;
+} | null {
+  const { song, stemVolumes, mutedStems, soloedStem, takeVolume, activeTakeId, takes } = state;
+  if (!song) return null;
+
+  const sources: import("../lib/tauri").MixSource[] = [];
+
+  for (const name of song.stems) {
+    const gain = effectiveStemGain(name, stemVolumes[name] ?? 1.0, mutedStems, soloedStem);
+    if (gain > 0) {
+      sources.push({ path: `${song.directory}/${name}.wav`, gain, isTake: false });
     }
-    eng.setStemVolume(name, vol);
   }
 
-  let takeVol = takeVolume;
-  if (soloedStem !== null) {
-    takeVol = soloedStem === TAKE_TRACK_KEY ? takeVol : 0;
-  } else if (mutedStems[TAKE_TRACK_KEY]) {
-    takeVol = 0;
+  const takeGain = effectiveStemGain(TAKE_TRACK_KEY, takeVolume, mutedStems, soloedStem);
+  if (takeGain > 0 && activeTakeId) {
+    const take = takes.find((t) => t.id === activeTakeId);
+    if (take) {
+      sources.push({
+        path: take.filepath,
+        gain: takeGain,
+        isTake: true,
+        startPosition: take.startPosition,
+        audioOffset: take.audioOffset ?? 0,
+      });
+    }
   }
-  eng.setTakeVolume(takeVol);
+
+  if (sources.length === 0) return null;
+
+  return {
+    sources,
+    startSec: state.punchIn ?? 0,
+    endSec: state.punchOut ?? state.duration,
+  };
 }
 
 export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => ({

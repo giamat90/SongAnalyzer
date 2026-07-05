@@ -60,6 +60,28 @@ export async function exportTake(takePath: string, suggestedName: string): Promi
   return invoke("export_take", { takePath, suggestedName });
 }
 
+export interface MixSource {
+  path: string;
+  gain: number;
+  isTake: boolean;
+  startPosition?: number;
+  audioOffset?: number;
+}
+
+/**
+ * Render a mixdown WAV from `sources` (each already resolved to a final
+ * linear gain by the caller) trimmed to [startSec, endSec) of the project
+ * timeline, then open a native Save As dialog for the result.
+ */
+export async function exportMix(
+  sources: MixSource[],
+  startSec: number,
+  endSec: number,
+  suggestedName: string,
+): Promise<void> {
+  return invoke("export_mix", { sources, startSec, endSec, suggestedName });
+}
+
 /** Listen for processing progress events */
 export function onProcessingProgress(
   callback: (status: ProcessingStatus) => void

@@ -73,7 +73,8 @@ SongPracticeStudio/
 ├── sidecar/
 │   ├── processor.py      ← Demucs 6s + BPM + key; main pipeline
 │   ├── yt_importer.py    ← yt-dlp download → processor.process()
-│   ├── main.py           ← JSON-lines command dispatcher (process, import_yt, ping, quit)
+│   ├── main.py           ← JSON-lines command dispatcher (process, import_yt, convert_take, mix_export, ping, quit)
+│   ├── recording.py      ← take WAV conversion (convert_take_to_wav) + mixdown rendering (mix_export)
 │   └── requirements.txt
 ├── src/
 │   ├── audio/engine.ts         ← AudioEngine: dynamic stems Map, rAF loop
@@ -97,7 +98,7 @@ SongPracticeStudio/
 │   │   └── AnalyzerPage.tsx   ← Header + StemView + transport/tempo footer
 │   └── App.tsx                ← Two-page router: library ↔ analyzer
 └── src-tauri/src/
-    ├── commands.rs   ← process_song, import_youtube, export_stem, list_songs, delete_song
+    ├── commands.rs   ← process_song, import_youtube, export_stem, export_take, export_mix, list_songs, delete_song
     ├── library.rs    ← Song struct (includes stems: Vec<String>), library.json CRUD
     └── lib.rs        ← Tauri builder, invoke_handler registration
 ```
