@@ -321,6 +321,7 @@ pub async fn export_stem(
 
 #[tauri::command]
 pub async fn save_take(
+    state: State<'_, SidecarState>,
     song_id: String,
     audio_data: Vec<u8>,
     start_position: f64,
@@ -333,11 +334,68 @@ pub async fn save_take(
     let file_path = takes_dir.join(format!("{take_id}.webm"));
     std::fs::write(&file_path, &audio_data).map_err(|e| format!("Write take: {e}"))?;
 
+    let file_path_str = file_path.to_string_lossy().to_string();
+    let normalized_output_path = takes_dir.join(format!("{take_id}.wav"));
+    let normalized_output_str = normalized_output_path.to_string_lossy().to_string();
+    let vocals_path = storage::song_dir(&song_id).join("vocals.wav");
+    let reference_path_str = vocals_path.exists().then(|| vocals_path.to_string_lossy().to_string());
+
+    // RMS-normalize the take's loudness against the vocals stem via sidecar.
+    let normalized_path: Option<String> = {
+        let guard = ensure_sidecar(&state);
+        if let Ok(guard) = guard {
+            if let Some(sidecar) = guard.as_ref() {
+                let mut cmd_obj = serde_json::json!({
+                    "cmd": "normalize_take",
+                    "recordingPath": file_path_str,
+                    "outputPath": normalized_output_str,
+                    "audioOffset": audio_offset,
+                });
+                if let Some(ref_path) = &reference_path_str {
+                    cmd_obj["referencePath"] = serde_json::json!(ref_path);
+                }
+                let _ = sidecar.send_command(&cmd_obj);
+                let timeout = std::time::Duration::from_secs(120);
+                let mut result = None;
+                loop {
+                    match sidecar.recv_timeout(timeout) {
+                        Ok(SidecarMessage::Result { data, .. }) => {
+                            result = data.get("path").and_then(|v| v.as_str().map(|s| s.to_string()));
+                            break;
+                        }
+                        Ok(SidecarMessage::Error { message, .. }) => {
+                            log::warn!("Take normalization error: {message}");
+                            break;
+                        }
+                        Ok(SidecarMessage::Progress { .. }) => continue,
+                        _ => break,
+                    }
+                }
+                result
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
+
+    // Prefer the loudness-normalized WAV; fall back to the raw webm if normalization failed.
+    let final_file_path_str = match &normalized_path {
+        Some(p) => {
+            if let Err(e) = std::fs::remove_file(&file_path) {
+                log::warn!("Could not remove raw take recording {file_path_str}: {e}");
+            }
+            p.clone()
+        }
+        None => file_path_str,
+    };
+
     let take = Take {
         id: take_id,
         song_id: song_id.clone(),
         recorded_at: chrono::Utc::now().to_rfc3339(),
-        filepath: file_path.to_string_lossy().to_string(),
+        filepath: final_file_path_str,
         name: None,
         start_position,
         audio_offset,

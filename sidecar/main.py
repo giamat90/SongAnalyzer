@@ -20,7 +20,7 @@ if getattr(sys, "frozen", False):
     os.environ["PATH"] = bundled_dir + os.pathsep + os.environ.get("PATH", "")
 
 from processor import process
-from recording import convert_take_to_wav, mix_export
+from recording import convert_take_to_wav, mix_export, normalize_take
 
 
 def send(msg: dict):
@@ -73,6 +73,15 @@ def main():
             elif cmd.get("cmd") == "convert_take":
                 result = convert_take_to_wav(cmd["recordingPath"], cmd["outputPath"])
                 send({"type": "result", "cmd": "convert_take", "data": result})
+
+            elif cmd.get("cmd") == "normalize_take":
+                result = normalize_take(
+                    cmd["recordingPath"],
+                    cmd["outputPath"],
+                    reference_path=cmd.get("referencePath"),
+                    audio_offset_s=float(cmd.get("audioOffset", 0.0)),
+                )
+                send({"type": "result", "cmd": "normalize_take", "data": result})
 
             elif cmd.get("cmd") == "mix_export":
                 result = mix_export(

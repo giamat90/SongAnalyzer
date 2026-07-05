@@ -1,14 +1,52 @@
 """
 Take (recorded track) file handling for Song Practice Studio.
 No pitch/vocal analysis — recording is saved as-is; this module only
-handles format conversion for export.
+handles format conversion for export and loudness normalization.
 """
 
+import os
 import numpy as np
 import soundfile as sf
 import librosa
 
 SAMPLE_RATE = 44100
+
+# Raw mic takes have far more dynamic range than a mastered/limited commercial
+# mix, so matching peak level alone still leaves takes sounding quiet next to
+# the separated stems. Match RMS (average loudness) to a reference stem
+# instead, capped so we never push peaks past PEAK_CEILING_DBFS.
+TARGET_RMS_DBFS_FALLBACK = -18.0  # used when no reference stem is available
+PEAK_CEILING_DBFS = -1.0
+
+
+def _rms_dbfs(samples: np.ndarray) -> float:
+    rms = np.sqrt(np.mean(samples.astype(np.float64) ** 2))
+    return 20 * np.log10(rms) if rms > 0 else -120.0
+
+
+def normalize_take(recording_path: str, output_path: str, reference_path: str = None, audio_offset_s: float = 0.0) -> dict:
+    """
+    RMS-normalize a recorded take against a reference stem (e.g. vocals.wav)
+    so it doesn't sound quiet next to the other stems at unity volume.
+    Falls back to a fixed target loudness when no reference stem exists.
+    """
+    take_audio, take_sr = librosa.load(recording_path, sr=None, mono=True, offset=audio_offset_s)
+    take_rms_db = _rms_dbfs(take_audio)
+    take_peak = float(np.max(np.abs(take_audio))) if take_audio.size else 0.0
+
+    if reference_path and os.path.exists(reference_path):
+        ref_audio, _ = librosa.load(reference_path, sr=take_sr, mono=True)
+        target_rms_db = _rms_dbfs(ref_audio)
+    else:
+        target_rms_db = TARGET_RMS_DBFS_FALLBACK
+
+    gain_linear = 10 ** ((target_rms_db - take_rms_db) / 20)
+    if take_peak > 0:
+        max_safe_gain = 10 ** (PEAK_CEILING_DBFS / 20) / take_peak
+        gain_linear = min(gain_linear, max_safe_gain)
+
+    sf.write(output_path, take_audio * gain_linear, take_sr)
+    return {"path": output_path, "appliedGainDb": round(20 * np.log10(gain_linear), 2) if gain_linear > 0 else 0.0}
 
 
 def convert_take_to_wav(recording_path: str, output_path: str) -> dict:
