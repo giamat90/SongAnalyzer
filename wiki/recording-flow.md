@@ -1,10 +1,10 @@
-# Loop Region & Playback
+# Loop Region, Recording & Playback
 
-**Key files:** `src/components/player/TimeRuler.tsx` · `src/stores/player.ts`
+**Key files:** `src/components/player/TimeRuler.tsx` · `src/stores/player.ts` · `src/audio/recorder.ts` · `src/components/recording/`
 
 ## Punch Region
 
-The `TimeRuler` (canvas strip above the waveform tracks) doubles as a loop region selector. There is no recording in Song Practice Studio — the "punch" terminology is inherited from the VPS fork and refers only to the playback loop region.
+The `TimeRuler` (canvas strip above the waveform tracks) doubles as a loop region selector. The "punch" terminology is inherited from the VPS fork; since recording landed (`a9f0806`), the region also bounds recording, and it doubles as the playback loop region.
 
 ### Interactions
 
@@ -42,3 +42,52 @@ if (punchOut !== null && currentTime >= punchOut) {
 ## Visual Representation
 
 The region is drawn as a translucent red band on the `TimeRuler` canvas with I-beam caps at the In/Out handles. Each `StemTrack` also renders a `PunchOverlay` div positioned via `left`/`width` percentages of the track width, so the region is visible across all stem waveforms simultaneously.
+
+## Latency Compensation
+
+The player hears the stems with a monitoring delay (typically 50–300 ms on USB WASAPI interfaces). To compensate, the recorded audio's `startPosition` is shifted back by the measured round-trip latency in `stopRecording()`; if that pushes it below 0 the remainder is stored as `audioOffset` (seconds to skip into the take file).
+
+### Compensation source (priority order)
+
+1. **Calibrated offset** (preferred) — the selected input device's entry in `recordingOffsets`, set by the click calibration flow, used only if not stale.
+2. **AudioContext estimate** (fallback) — `outputLatency + baseLatency` plus the mic track's `getSettings().latency`. Also used when a stored calibration is stale; the store flag `usedLatencyFallback` records which path ran. Recording is never blocked.
+
+### Calibration entry schema
+
+Each `recordingOffsets` entry is a `CalibrationEntry` (`player.ts`), keyed by input `deviceId` and persisted to `localStorage` (`songpracticestudio_recording_offsets`):
+
+```ts
+interface CalibrationEntry {
+  offset: number;  // ms
+  stale?: boolean; // set by device-change invalidation
+  madMs?: number;  // measurement-spread MAD; absent for manual entries
+  outputDeviceId?: string; // unused in SPS (calibration plays through the default output);
+                           // kept schema-compatible with VPS
+}
+```
+
+Legacy plain-number entries are migrated on load (`n → { offset: n }`). Manually typed offsets are stored bare, which also clears a stale flag.
+
+### Staleness and invalidation
+
+A `devicechange` listener (registered from `fetchAudioDevices`) re-enumerates devices and, only if the device set actually changed, marks stale any entry whose device is no longer present. Stale entries are kept — never deleted — but skipped at recording time. When the active input's calibration is stale or missing, `RecordingOffsetControl` shows a non-blocking "recalibrate?" banner that triggers the normal Cal flow.
+
+### Per-device calibration and confidence
+
+`RecordingOffsetControl` plays 4 count-in + 8 measured clicks, records the response (clap, tap, or pluck — any sharp sound), detects onsets via an RMS envelope, and stores the median offset. It also computes the MAD (median absolute deviation) of the detected offsets as `madMs`:
+
+| MAD | Confidence |
+|---|---|
+| ≤ 5 ms | high |
+| 5–15 ms | medium |
+| > 15 ms | low |
+
+A confidence chip is shown next to the calibrated value and in the result banner; low confidence adds a hint to re-run in a quieter room. Low-confidence values are never auto-discarded.
+
+### Sanity bounds
+
+A measurement is rejected (error state, nothing persisted, any previous offset untouched) when the median is negative, exceeds 500 ms (`MAX_OFFSET_MS`), or fewer than 5 of the 8 measured clicks produced a detected onset (`MIN_DETECTED_CLAPS`). Rejected raw values are logged via `console.debug("[calibration] rejected: …")`.
+
+### Drift-check instrumentation
+
+On stop, takes longer than 90 s log `[drift-check] takeDuration=…s input=… output=…` via `console.info`. Diagnostics only — no drift is measured or corrected.
