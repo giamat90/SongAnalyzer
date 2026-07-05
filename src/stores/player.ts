@@ -46,6 +46,9 @@ interface PlayerState {
   // Recording state
   audioDevices: MediaDeviceInfo[];
   selectedDeviceId: string | null;
+  // Playback output device
+  outputDevices: MediaDeviceInfo[];
+  selectedOutputDeviceId: string | null;
   isRecording: boolean;
   isSavingTake: boolean;
   takes: Take[];
@@ -76,6 +79,9 @@ interface PlayerActions {
   fetchAudioDevices: () => Promise<void>;
   setAudioDevice: (deviceId: string | null) => void;
   setRecordingOffset: (deviceId: string, offsetMs: number) => void;
+  // Playback output device actions
+  fetchOutputDevices: () => Promise<void>;
+  setOutputDevice: (deviceId: string | null) => Promise<void>;
   // Recording actions
   startRecording: () => Promise<void>;
   stopRecording: () => Promise<void>;
@@ -133,6 +139,8 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => 
   punchLoop: false,
   audioDevices: [],
   selectedDeviceId: null,
+  outputDevices: [],
+  selectedOutputDeviceId: null,
   isRecording: false,
   isSavingTake: false,
   takes: [],
@@ -290,6 +298,23 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => 
     } catch (e) {
       console.warn("[settings] Could not persist recording offsets:", e);
     }
+  },
+
+  fetchOutputDevices: async () => {
+    // Same WebView2 permission issue as fetchAudioDevices — probe before enumerating.
+    try {
+      const probe = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      probe.getTracks().forEach((t) => t.stop());
+    } catch (e) {
+      console.warn("Mic permission probe failed — output device list may be incomplete:", e);
+    }
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    set({ outputDevices: devices.filter((d) => d.kind === "audiooutput") });
+  },
+
+  setOutputDevice: async (deviceId) => {
+    await getEngine().setOutputDevice(deviceId ?? "");
+    set({ selectedOutputDeviceId: deviceId });
   },
 
   startRecording: async () => {

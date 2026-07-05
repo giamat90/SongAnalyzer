@@ -87,7 +87,8 @@ SongPracticeStudio/
 │   │   │   ├── StemTrack.tsx      ← Single stem row: waveform + volume + download button
 │   │   │   ├── TimeRuler.tsx      ← Canvas ruler with drag-to-create punch region
 │   │   │   ├── TransportControls.tsx  ← Play/pause/stop + time display
-│   │   │   └── TempoControl.tsx   ← Speed slider (0.5–2.0x)
+│   │   │   ├── TempoControl.tsx   ← Speed slider (0.5–2.0x)
+│   │   │   └── OutputSelector.tsx ← Audio output device picker (ported from VPS)
 │   │   └── upload/
 │   │       ├── DropZone.tsx       ← File drag-and-drop → processSong
 │   │       └── YouTubeImport.tsx  ← URL paste → importYoutube
@@ -173,7 +174,6 @@ cd sidecar && python build.py
 - Take playback and management (TakeList, loadTakeTrack)
 - Coaching panel (CoachPanel)
 - Key transpose (KeyTranspose, pitch_shift_song)
-- Output device selector (OutputSelector — device routing not needed without recording)
 - Vibrato / timing / dynamics analysis cards
 
 If any of these are needed, refer to `C:\Workspace\GiaMat90\VPS` for the implementation.

@@ -977,6 +977,7 @@ body,
   text-transform: uppercase;
   letter-spacing: 0.05em;
   white-space: nowrap;
+  min-width: 3.6rem;
 }
 
 .output-selector__select {
@@ -1009,6 +1010,7 @@ body,
   text-transform: uppercase;
   letter-spacing: 0.05em;
   white-space: nowrap;
+  min-width: 3.6rem;
 }
 
 .mic-selector__select {
@@ -1544,6 +1546,12 @@ body,
   background: var(--bg-primary);
 }
 
+.analyzer-page__io-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
 /* Stem View */
 .stem-view {
   display: flex;
@@ -1754,6 +1762,7 @@ body,
   text-transform: uppercase;
   letter-spacing: 0.05em;
   white-space: nowrap;
+  min-width: 3.6rem;
 }
 
 .mic-selector__select {
@@ -1769,6 +1778,39 @@ body,
 }
 
 .mic-selector__select:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Output Selector */
+.output-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.output-selector__label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  min-width: 3.6rem;
+}
+
+.output-selector__select {
+  background: var(--bg-surface);
+  border: none;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-family: inherit;
+  padding: 0.25rem 0.4rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  max-width: 11rem;
+}
+
+.output-selector__select:disabled {
   opacity: 0.4;
   cursor: default;
 }
