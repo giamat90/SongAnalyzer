@@ -76,7 +76,7 @@ export const useLibraryStore = create<LibraryState>((set) => ({
   },
 
   uploadSong: async (filePath: string, stems?: StemName[], highQuality?: boolean) => {
-    set({ error: null });
+    set({ error: null, processing: { songId: "", stage: "Preparing…", progress: 0, isComplete: false } });
     try {
       const song = await processSong(filePath, stems, highQuality);
       set((state) => ({
@@ -90,7 +90,7 @@ export const useLibraryStore = create<LibraryState>((set) => ({
   },
 
   importYoutube: async (url: string, stems?: StemName[], highQuality?: boolean) => {
-    set({ error: null });
+    set({ error: null, processing: { songId: "", stage: "Connecting…", progress: 0, isComplete: false } });
     try {
       const song = await importYoutubeApi(url, stems, highQuality);
       set((state) => ({
