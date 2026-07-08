@@ -91,6 +91,7 @@ All data lives under `~/.songpracticestudio/` (`C:\Users\{user}\.songpracticestu
 | `export_stem` | `stemPath, suggestedName: string` | `void` (native Save-As dialog) |
 | `export_take` | `takePath, suggestedName: string` | `void` (always WAV; sidecar `convert_take` first) |
 | `export_mix` | `sources: MixSource[], startSec, endSec: f64, suggestedName: string` | `void` (sidecar `mix_export`, then Save-As) |
+| `export_all` | `entries: ZipEntry[] ({path, archiveName}), suggestedName: string` | `void` (native Save-As dialog for `.zip`; `zip` crate writes each entry, no sidecar involved) |
 
 All commands are async and return a `Promise`. Errors are thrown as strings.
 

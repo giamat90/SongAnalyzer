@@ -30,6 +30,16 @@ export async function exportStem(
   return invoke("export_stem", { stemPath, suggestedName });
 }
 
+export interface ZipExportEntry {
+  path: string;
+  archiveName: string;
+}
+
+/** Open a native Save As dialog and bundle stems + takes into a zip archive */
+export async function exportAll(entries: ZipExportEntry[], suggestedName: string): Promise<void> {
+  return invoke("export_all", { entries, suggestedName });
+}
+
 /** Save a recorded take */
 export async function saveTake(
   songId: string,

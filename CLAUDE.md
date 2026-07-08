@@ -3,7 +3,7 @@
 ## What this project is
 
 A Tauri v2 + React + TypeScript + Python desktop app.  
-Drop any audio file (or paste a YouTube URL) → Demucs splits it into up to 6 instrument stems → multi-track player lets you listen, mute/solo/volume per stem, loop a region, slow down, record yourself over the mix (with latency compensation), export a mixdown of the live mix, and download each stem as WAV.
+Drop any audio file (or paste a YouTube URL) → Demucs splits it into up to 6 instrument stems → multi-track player lets you listen, mute/solo/volume per stem, loop a region, slow down, record yourself over the mix (with latency compensation), export a mixdown of the live mix, download each stem as WAV, or download everything (all stems + all recorded takes) at once as a zip via `export_all`.
 
 Forked from **VPS** (`C:\Workspace\GiaMat90\MPS\VPS`), a vocal practice studio. The fork originally stripped all recording/analysis/coaching features; **recording was later reimplemented** for the multi-stem context (commit `a9f0806`, v0.0.7) with its own latency-compensation model. Pitch analysis and coaching remain VPS-only.
 
@@ -126,7 +126,7 @@ SongPracticeStudio/
 │   │   └── AnalyzerPage.tsx   ← Header + StemView + transport/tempo footer
 │   └── App.tsx                ← Two-page router: library ↔ analyzer
 └── src-tauri/src/
-    ├── commands.rs   ← process_song, import_youtube, export_stem, export_take, export_mix, save_take, list_takes, delete_take, rename_take, list_songs, delete_song
+    ├── commands.rs   ← process_song, import_youtube, export_stem, export_all, export_take, export_mix, save_take, list_takes, delete_take, rename_take, list_songs, delete_song
     ├── library.rs    ← Song struct (includes stems: Vec<String>), library.json CRUD
     └── lib.rs        ← Tauri builder, invoke_handler registration
 ```

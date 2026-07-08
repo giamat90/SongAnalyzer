@@ -1,6 +1,6 @@
 [package]
 name = "song-practice-studio"
-version = "0.0.15"
+version = "0.0.16"
 description = "Stem separation player — split any song into instrument tracks"
 authors = ["GiaMat90"]
 license = ""
@@ -28,3 +28,4 @@ dirs = "6"
 chrono = { version = "0.4", features = ["serde"] }
 tauri-plugin-dialog = "2.7.0"
 tauri-plugin-updater = "2.10.1"
+zip = "2.2"

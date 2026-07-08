@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import StemView from "../components/player/StemView";
+import DownloadAllButton from "../components/player/DownloadAllButton";
 import TransportControls from "../components/player/TransportControls";
 import TempoControl from "../components/player/TempoControl";
 import MicSelector from "../components/recording/MicSelector";
@@ -47,6 +48,7 @@ function AnalyzerPage({ songId, onBack }: AnalyzerPageProps) {
             {song.detectedKey && <span>{song.detectedKey}</span>}
           </div>
         </div>
+        <DownloadAllButton song={song} />
       </header>
 
       <div className="analyzer-page__topbar">
