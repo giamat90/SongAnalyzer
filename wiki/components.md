@@ -132,7 +132,9 @@ Play/pause/stop buttons + current time display. Stop seeks to 0. Time is read fr
 
 ### TempoControl
 
-BPM-first speed control (ported from VPS): an editable BPM value (derived from `detectedBpm × playbackRate`) alongside an editable ×-rate, clamped to 0.5–2.0×. Calls `engine.setPlaybackRate(rate)` and persists the value in the player store.
+BPM-first speed control (ported from VPS): an editable BPM value (derived from `detectedBpm × playbackRate`) alongside an editable ×-rate, clamped to 0.25–2.5× (corrected 2026-07-08; this page previously said 0.5–2.0×, which didn't match the code's `Math.max(0.25, Math.min(2.5, ...))` clamp). Calls `engine.setPlaybackRate(rate)` and persists the value in the player store.
+
+**Metronome (🥁 toggle, header row, ported from VPS):** same design as VPS's — local component state, synced to the transport (silent while paused, clicks only while `isPlaying`), effective BPM `(detectedBpm ?? 120) * playbackRate`, accented downbeat every 4th click (assumed 4/4), driven by `src/audio/metronome.ts`'s lookahead-scheduled `Metronome` singleton (byte-identical to VPS's — same 25 ms tick / 100 ms schedule-ahead Web Audio scheduler). No SPS-specific adaptation was needed: the feature only touches `TempoControl.tsx` and the player store's existing `isPlaying`/`playbackRate` fields, which are the same shape on both sides. Like VPS, not phase-locked to the song's actual downbeats — no beat-grid/offset data exists to lock to.
 
 ### DropZone
 

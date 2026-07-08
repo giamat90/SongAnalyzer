@@ -95,7 +95,8 @@ SongPracticeStudio/
 ├── src/
 │   ├── audio/
 │   │   ├── engine.ts           ← AudioEngine: dynamic stems Map + take instance, rAF loop
-│   │   └── recorder.ts         ← VocalRecorder (MediaRecorder wrapper, Web Audio channel-fix graph)
+│   │   ├── recorder.ts         ← VocalRecorder (MediaRecorder wrapper, Web Audio channel-fix graph)
+│   │   └── metronome.ts        ← Metronome class (Web Audio lookahead-scheduled click track)
 │   ├── stores/
 │   │   ├── player.ts           ← Zustand: stemVolumes/mute/solo, punch region, transport, recording, latency calibration
 │   │   ├── library.ts          ← Zustand: song list, upload/import, progress
@@ -111,7 +112,7 @@ SongPracticeStudio/
 │   │   │   ├── TakeTrack.tsx      ← Recorded take row, aligned at its startPosition
 │   │   │   ├── TimeRuler.tsx      ← Canvas ruler with drag-to-create punch region
 │   │   │   ├── TransportControls.tsx  ← Play/pause/stop + time display
-│   │   │   ├── TempoControl.tsx   ← BPM-first speed control
+│   │   │   ├── TempoControl.tsx   ← BPM-first speed control + metronome toggle
 │   │   │   └── OutputSelector.tsx ← Audio output device picker (ported from VPS)
 │   │   ├── recording/
 │   │   │   ├── RecordButton.tsx   ← Start/stop recording
