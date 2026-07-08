@@ -104,7 +104,9 @@ SongPracticeStudio/
 │   ├── lib/tauri.ts            ← IPC wrappers: processSong, listSongs, saveTake, exportStem, exportMix, …
 │   ├── components/
 │   │   ├── player/
-│   │   │   ├── StemView.tsx       ← TimeRuler + all StemTracks + TakeTrack + Export Mix button
+│   │   │   ├── StemView.tsx       ← TimeRuler + all StemTracks + TakeTrack
+│   │   │   ├── ExportMixButton.tsx ← export current mix as WAV (rendered in AnalyzerPage header)
+│   │   │   ├── DownloadAllButton.tsx ← zip export of all stems + takes (rendered in AnalyzerPage header)
 │   │   │   ├── StemTrack.tsx      ← Single stem row: waveform + mute/solo/volume + download button
 │   │   │   ├── TakeTrack.tsx      ← Recorded take row, aligned at its startPosition
 │   │   │   ├── TimeRuler.tsx      ← Canvas ruler with drag-to-create punch region
