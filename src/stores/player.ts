@@ -100,6 +100,9 @@ interface PlayerState {
   // True when the last startRecording used the AudioContext estimate because the
   // stored calibration was missing or stale.
   usedLatencyFallback: boolean;
+  // Timeline zoom/pan (ctrl+wheel / shift+wheel)
+  minPxPerSec: number;
+  scrollTime: number;
 }
 
 interface PlayerActions {
@@ -135,6 +138,9 @@ interface PlayerActions {
   renameTake: (takeId: string, name: string) => Promise<void>;
   setActiveTake: (takeId: string) => void;
   setTakeVolume: (v: number) => void;
+  // Timeline zoom/pan actions
+  setZoom: (minPxPerSec: number, scrollTime: number) => void;
+  setScrollTime: (scrollTime: number) => void;
 }
 
 // Reserved mute/solo key for the recorded take track (shares the same
@@ -239,10 +245,13 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => 
   takeVolume: 1.0,
   recordingOffsets: _loadOffsets(),
   usedLatencyFallback: false,
+  minPxPerSec: 1,
+  scrollTime: 0,
 
   loadSong: async (song, containers) => {
     const eng = getEngine();
     await eng.load(song.directory, song.stems, containers);
+    eng.onScrollChange((minPxPerSec, scrollTime) => set({ minPxPerSec, scrollTime }));
     eng.onTimeUpdate((time) => {
       set({ currentTime: time, isPlaying: eng.isPlaying });
       const s = get();
@@ -273,6 +282,8 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => 
       }
     });
     const initialVolumes = Object.fromEntries(song.stems.map((n) => [n, 1.0]));
+    const baselinePxPerSec = eng.getMinPxPerSec();
+    eng.zoomAll(baselinePxPerSec, 0);
     set({
       song,
       duration: eng.getDuration(),
@@ -287,6 +298,8 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => 
       takeVolume: 1.0,
       isRecording: false,
       isSavingTake: false,
+      minPxPerSec: baselinePxPerSec,
+      scrollTime: 0,
     });
     get().fetchTakes();
   },
@@ -618,4 +631,7 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => 
     }
     getEngine().setTakeVolume(vol);
   },
+
+  setZoom: (minPxPerSec, scrollTime) => set({ minPxPerSec, scrollTime }),
+  setScrollTime: (scrollTime) => set({ scrollTime }),
 }));
