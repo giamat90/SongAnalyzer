@@ -19,16 +19,18 @@ interface StemTrackProps {
 }
 
 function PunchOverlay() {
-  const punchIn  = usePlayerStore((s) => s.punchIn);
-  const punchOut = usePlayerStore((s) => s.punchOut);
-  const duration = usePlayerStore((s) => s.duration);
+  const punchIn     = usePlayerStore((s) => s.punchIn);
+  const punchOut    = usePlayerStore((s) => s.punchOut);
+  const duration    = usePlayerStore((s) => s.duration);
+  const minPxPerSec = usePlayerStore((s) => s.minPxPerSec);
+  const scrollTime  = usePlayerStore((s) => s.scrollTime);
   if (punchIn === null || punchOut === null || duration <= 0) return null;
   return (
     <div
       className="waveform__punch-overlay"
       style={{
-        left:  `${(punchIn  / duration) * 100}%`,
-        width: `${((punchOut - punchIn) / duration) * 100}%`,
+        left:  `${(punchIn - scrollTime) * minPxPerSec}px`,
+        width: `${(punchOut - punchIn) * minPxPerSec}px`,
       }}
     />
   );

@@ -41,7 +41,8 @@ Replaces the fixed `vocals`/`instrumental`/`take` WaveSurfer trio with a dynamic
 ### Player store (`src/stores/player.ts`)
 `stemVolumes: Record<string, number>` per-stem volume, `mutedStems: Record<string, boolean>` and `soloedStem: string | null` for the per-stem mute/solo buttons.  
 Punch region state (`punchIn`, `punchOut`, `punchLoop`) is shared with the TimeRuler — same pattern as VPS.  
-Recording state: `isRecording`, `isSavingTake`, `takes: Take[]`, `activeTakeId`, `takeVolume`, mic/output device selection, and `recordingOffsets: Record<string, CalibrationEntry>` (per-device latency calibration `{ offset, stale?, madMs? }`, localStorage-backed, with `usedLatencyFallback` set when recording starts without a usable calibration). Recording auto-stops when playback stops itself (punch-out or song end). No transpose state (VPS-only).
+Recording state: `isRecording`, `isSavingTake`, `takes: Take[]`, `activeTakeId`, `takeVolume`, mic/output device selection, and `recordingOffsets: Record<string, CalibrationEntry>` (per-device latency calibration `{ offset, stale?, madMs? }`, localStorage-backed, with `usedLatencyFallback` set when recording starts without a usable calibration). Recording auto-stops when playback stops itself (punch-out or song end). No transpose state (VPS-only).  
+Timeline zoom/pan state: `minPxPerSec` (zoom level, WaveSurfer's own px-per-second unit) and `scrollTime` (song time at the left edge of the visible window) — ctrl+wheel/shift+wheel over the stem timeline; see `wiki/audio-engine.md#timeline-zoompan`.
 
 ### Processing pipeline (`sidecar/processor.py`)
 Three stages:
@@ -103,6 +104,7 @@ SongPracticeStudio/
 │   │   └── updater.ts          ← Zustand: auto-update state (tauri-plugin-updater)
 │   ├── lib/types.ts            ← Song, StemName, Take, ProcessingStatus
 │   ├── lib/tauri.ts            ← IPC wrappers: processSong, listSongs, saveTake, exportStem, exportMix, …
+│   ├── lib/zoomPan.ts          ← pure zoom-to-cursor / pan math for timeline ctrl+wheel/shift+wheel (byte-identical to VPS)
 │   ├── components/
 │   │   ├── player/
 │   │   │   ├── StemView.tsx       ← TimeRuler + all StemTracks + TakeTrack
