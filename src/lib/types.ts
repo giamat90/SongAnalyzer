@@ -9,6 +9,7 @@ export interface Song {
   processedAt: string;
   directory: string;
   stems: StemName[];
+  metronomeOffset?: number;
 }
 
 export interface ProcessingStatus {

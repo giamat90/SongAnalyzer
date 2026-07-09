@@ -19,6 +19,7 @@ pub fn run() {
             commands::export_all,
             commands::list_songs,
             commands::delete_song,
+            commands::set_metronome_offset,
             commands::save_take,
             commands::list_takes,
             commands::delete_take,

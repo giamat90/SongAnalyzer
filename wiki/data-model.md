@@ -16,8 +16,11 @@ interface Song {
   processedAt: string;  // ISO timestamp
   directory: string;    // absolute path to ~/.songpracticestudio/library/{id}/
   stems: StemName[];    // e.g. ["vocals","drums","bass","guitar","piano","other"]
+  metronomeOffset?: number; // song time (s) where the metronome's beat 1 lands
 }
 ```
+
+**`metronomeOffset`** — set via `set_metronome_offset(songId, offset)`, which mirrors `rename_take`'s "find by id, mutate one field, re-save library.json" shape rather than going through `library::add`. `null`/absent means the metronome phase-locks to song position 0 (unchanged legacy behavior). See [Components: TempoControl](components.md#tempocontrol).
 
 ### Take
 

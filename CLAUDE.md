@@ -3,7 +3,7 @@
 ## What this project is
 
 A Tauri v2 + React + TypeScript + Python desktop app.  
-Drop any audio file (or paste a YouTube URL) → Demucs splits it into up to 6 instrument stems → multi-track player lets you listen, mute/solo/volume per stem, loop a region, slow down, record yourself over the mix (with latency compensation), export a mixdown of the live mix, download each stem as WAV, or download everything (all stems + all recorded takes) at once as a zip via `export_all`.
+Drop any audio file (or paste a YouTube URL) → Demucs splits it into up to 6 instrument stems → multi-track player lets you listen, mute/solo/volume per stem, loop a region, slow down, click along to a phase-lockable metronome, zoom/pan the timeline (ctrl+wheel / shift+wheel), record yourself over the mix (with latency compensation), export a mixdown of the live mix, download each stem as WAV, or download everything (all stems + all recorded takes) at once as a zip via `export_all`.
 
 Forked from **VPS** (`C:\Workspace\GiaMat90\MPS\VPS`), a vocal practice studio. The fork originally stripped all recording/analysis/coaching features; **recording was later reimplemented** for the multi-stem context (commit `a9f0806`, v0.0.7) with its own latency-compensation model. Pitch analysis and coaching remain VPS-only.
 
@@ -42,7 +42,8 @@ Replaces the fixed `vocals`/`instrumental`/`take` WaveSurfer trio with a dynamic
 `stemVolumes: Record<string, number>` per-stem volume, `mutedStems: Record<string, boolean>` and `soloedStem: string | null` for the per-stem mute/solo buttons.  
 Punch region state (`punchIn`, `punchOut`, `punchLoop`) is shared with the TimeRuler — same pattern as VPS.  
 Recording state: `isRecording`, `isSavingTake`, `takes: Take[]`, `activeTakeId`, `takeVolume`, mic/output device selection, and `recordingOffsets: Record<string, CalibrationEntry>` (per-device latency calibration `{ offset, stale?, madMs? }`, localStorage-backed, with `usedLatencyFallback` set when recording starts without a usable calibration). Recording auto-stops when playback stops itself (punch-out or song end). No transpose state (VPS-only).  
-Timeline zoom/pan state: `minPxPerSec` (zoom level, WaveSurfer's own px-per-second unit) and `scrollTime` (song time at the left edge of the visible window) — ctrl+wheel/shift+wheel over the stem timeline; see `wiki/audio-engine.md#timeline-zoompan`.
+Timeline zoom/pan state: `minPxPerSec` (zoom level, WaveSurfer's own px-per-second unit) and `scrollTime` (song time at the left edge of the visible window) — ctrl+wheel/shift+wheel over the stem timeline; see `wiki/audio-engine.md#timeline-zoompan`.  
+`metronomeOffset` (song time (s) where the metronome's beat 1 lands, persisted per song via `set_metronome_offset`) — drag the downbeat marker on the TimeRuler, or "Set" to the current playhead, in `TempoControl`; see `wiki/components.md#tempocontrol`.
 
 ### Processing pipeline (`sidecar/processor.py`)
 Three stages:
@@ -105,6 +106,7 @@ SongPracticeStudio/
 │   ├── lib/types.ts            ← Song, StemName, Take, ProcessingStatus
 │   ├── lib/tauri.ts            ← IPC wrappers: processSong, listSongs, saveTake, exportStem, exportMix, …
 │   ├── lib/zoomPan.ts          ← pure zoom-to-cursor / pan math for timeline ctrl+wheel/shift+wheel (byte-identical to VPS)
+│   ├── lib/metronomeSync.ts    ← pure phase-lock math for the metronome downbeat anchor (byte-identical to VPS)
 │   ├── components/
 │   │   ├── player/
 │   │   │   ├── StemView.tsx       ← TimeRuler + all StemTracks + TakeTrack
@@ -131,7 +133,7 @@ SongPracticeStudio/
 │   │   └── AnalyzerPage.tsx   ← Header + StemView + transport/tempo footer
 │   └── App.tsx                ← Two-page router: library ↔ analyzer
 └── src-tauri/src/
-    ├── commands.rs   ← process_song, import_youtube, export_stem, export_all, export_take, export_mix, save_take, list_takes, delete_take, rename_take, list_songs, delete_song
+    ├── commands.rs   ← process_song, import_youtube, export_stem, export_all, export_take, export_mix, save_take, list_takes, delete_take, rename_take, list_songs, delete_song, set_metronome_offset
     ├── library.rs    ← Song struct (includes stems: Vec<String>), library.json CRUD
     └── lib.rs        ← Tauri builder, invoke_handler registration
 ```

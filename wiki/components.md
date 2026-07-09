@@ -77,6 +77,7 @@ const togglePlay = usePlayerStore((s) => s.togglePlay);
 | `usedLatencyFallback` | `boolean` | True when recording started without a usable calibration |
 | `minPxPerSec` | `number` | Timeline zoom level (WaveSurfer's own px-per-second unit); ctrl+wheel changes this |
 | `scrollTime` | `number` | Song time (seconds) at the left edge of the visible timeline window; shift+wheel changes this |
+| `metronomeOffset` | `number` | Song time (seconds) where the metronome's beat 1 lands; persisted per song via `set_metronome_offset` |
 
 See [Recording Flow](recording-flow.md) for the recording state machine and latency compensation.
 
@@ -137,7 +138,7 @@ Auto-update modal backed by `src/stores/updater.ts` and `tauri-plugin-updater`: 
 
 ### TimeRuler
 
-Canvas strip above all stem tracks. Shows time ticks at adaptive intervals (≥80 px target). Drag to draw/edit the loop region; click to clear. The ⟳ button toggles `punchLoop`. See [Loop Region & Playback](recording-flow.md) for full interaction details.
+Canvas strip above all stem tracks. Shows time ticks at adaptive intervals (≥80 px target). Drag to draw/edit the loop region; click to clear. The ⟳ button toggles `punchLoop`. See [Loop Region & Playback](recording-flow.md) for full interaction details. Also draws a draggable blue downbeat marker (dashed line + flag at the bottom edge) for the metronome's phase-lock anchor, hit-tested with priority over the loop-region drag modes — see [Metronome: Downbeat offset](#tempocontrol).
 
 All of `tX`/`xToTime` (coordinate mapping), `modeForOffset` (handle hit-testing), and the tick-drawing loop read `minPxPerSec`/`scrollTime` from the player store instead of assuming the whole song spans the full canvas width — tick spacing gets finer as zoom increases (`tickInterval` is computed from the *visible* duration, `canvasWidthPx / minPxPerSec`, not the song's total duration), and only the visible time range is drawn. See [Timeline Zoom/Pan](#timeline-zoompan) above.
 
@@ -149,7 +150,15 @@ Play/pause/stop buttons + current time display. Stop seeks to 0. Time is read fr
 
 BPM-first speed control (ported from VPS): an editable BPM value (derived from `detectedBpm × playbackRate`) alongside an editable ×-rate, clamped to 0.25–2.5× (corrected 2026-07-08; this page previously said 0.5–2.0×, which didn't match the code's `Math.max(0.25, Math.min(2.5, ...))` clamp). Calls `engine.setPlaybackRate(rate)` and persists the value in the player store.
 
-**Metronome (🥁 toggle, header row, ported from VPS):** same design as VPS's — local component state, synced to the transport (silent while paused, clicks only while `isPlaying`), effective BPM `(detectedBpm ?? 120) * playbackRate`, accented downbeat every 4th click (assumed 4/4), driven by `src/audio/metronome.ts`'s lookahead-scheduled `Metronome` singleton (byte-identical to VPS's — same 25 ms tick / 100 ms schedule-ahead Web Audio scheduler). No SPS-specific adaptation was needed: the feature only touches `TempoControl.tsx` and the player store's existing `isPlaying`/`playbackRate` fields, which are the same shape on both sides. Like VPS, not phase-locked to the song's actual downbeats — no beat-grid/offset data exists to lock to.
+**Metronome (🥁 toggle, header row, ported from VPS):** same design as VPS's — local component state (`metronomeEnabled`, not in the Zustand store), synced to the transport (silent while paused, clicks only while `isPlaying`), effective BPM `(detectedBpm ?? 120) * playbackRate`, accented downbeat every 4th click (assumed 4/4), driven by `src/audio/metronome.ts`'s lookahead-scheduled `Metronome` singleton (byte-identical to VPS's — same 25 ms tick / 100 ms schedule-ahead Web Audio scheduler). The controlling `useEffect` resyncs (not just retunes) on every `metronomeEnabled`/`isPlaying`/effective-BPM/`metronomeOffset` change.
+
+**Downbeat offset (phase-locking):** the metronome used to always start ticking at beat 0 the instant playback started, drifting out of sync with the song's actual downbeat whenever there's silence (or a pickup) before it. `metronomeOffset` (player store, persisted per song via the `metronomeOffset` field on `Song` and the `set_metronome_offset` Tauri command — mirrors `rename_take`) is a song-time anchor the click track phase-locks to instead: `src/lib/metronomeSync.ts`'s `computeMetronomePhase()` (pure, byte-identical with VPS) returns the wall-clock delay until the next aligned click plus which beat-in-bar it is, fed straight into `Metronome.start(bpm, timeUntilNextBeat, startBeat)` — reworked to always reset phase, even if already running (removed the old "already running → just retuned" early-return and the now-unused `setBpm()`). No SPS-specific adaptation was needed for any of this: it only touches `TempoControl.tsx` (byte-identical file) and the player store's existing `isPlaying`/`playbackRate` shape, same as the original metronome port.
+
+The anchor is set two ways, both in `TempoControl`'s new "Downbeat" row (shown only while `metronomeEnabled`) and on `TimeRuler`:
+- **Set button** — captures `getEngine().getCurrentTime()` at the moment it's clicked.
+- **Drag** — `TimeRuler` draws a draggable marker (dashed blue vertical line + downward flag at the bottom edge) at the anchor's position, hit-tested with priority over the existing punch-region `create`/`drag-in`/`drag-out` modes (a new `"drag-metronome"` `DragMode` and a third `overrideMetronome` parameter on `draw()`, mirroring `overrideIn`/`overrideOut`).
+
+A "↺" reset-to-0 button appears next to Set once the offset is nonzero.
 
 ### DropZone
 

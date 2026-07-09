@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { AudioEngine } from "../audio/engine";
 import { VocalRecorder } from "../audio/recorder";
 import type { Song, StemName, Take } from "../lib/types";
-import { saveTake, listTakes, deleteTakeApi, renameTakeApi } from "../lib/tauri";
+import { saveTake, listTakes, deleteTakeApi, renameTakeApi, setMetronomeOffsetApi } from "../lib/tauri";
 
 let engine: AudioEngine | null = null;
 let recorder: VocalRecorder | null = null;
@@ -103,6 +103,10 @@ interface PlayerState {
   // Timeline zoom/pan (ctrl+wheel / shift+wheel)
   minPxPerSec: number;
   scrollTime: number;
+  // Metronome downbeat anchor — song time (s) where beat 1 lands, so the
+  // click track can be aligned past any silence/pickup before the song's
+  // actual downbeat. Persisted per song.
+  metronomeOffset: number;
 }
 
 interface PlayerActions {
@@ -141,6 +145,8 @@ interface PlayerActions {
   // Timeline zoom/pan actions
   setZoom: (minPxPerSec: number, scrollTime: number) => void;
   setScrollTime: (scrollTime: number) => void;
+  // Metronome downbeat anchor action
+  setMetronomeOffset: (t: number) => void;
 }
 
 // Reserved mute/solo key for the recorded take track (shares the same
@@ -247,6 +253,7 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => 
   usedLatencyFallback: false,
   minPxPerSec: 1,
   scrollTime: 0,
+  metronomeOffset: 0,
 
   loadSong: async (song, containers) => {
     const eng = getEngine();
@@ -300,6 +307,7 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => 
       isSavingTake: false,
       minPxPerSec: baselinePxPerSec,
       scrollTime: 0,
+      metronomeOffset: Math.max(0, Math.min(eng.getDuration(), song.metronomeOffset ?? 0)),
     });
     get().fetchTakes();
   },
@@ -634,4 +642,14 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => 
 
   setZoom: (minPxPerSec, scrollTime) => set({ minPxPerSec, scrollTime }),
   setScrollTime: (scrollTime) => set({ scrollTime }),
+
+  setMetronomeOffset: (t) => {
+    const { song, duration } = get();
+    if (!song) return;
+    const clamped = Math.max(0, Math.min(duration > 0 ? duration : Math.max(0, t), t));
+    set({ metronomeOffset: clamped, song: { ...song, metronomeOffset: clamped } });
+    setMetronomeOffsetApi(song.id, clamped).catch((e: unknown) =>
+      console.error("[player] failed to persist metronome offset:", e)
+    );
+  },
 }));

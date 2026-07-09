@@ -15,6 +15,11 @@ pub struct Song {
     pub directory: String,
     #[serde(default)]
     pub stems: Vec<String>,
+    // Song time (s) where the metronome's beat 1 lands — lets the user align
+    // the click track to the song's actual downbeat when there's silence (or
+    // a pickup) before it, instead of always starting at song position 0.
+    #[serde(default)]
+    pub metronome_offset: Option<f64>,
 }
 
 fn library_path() -> std::path::PathBuf {
@@ -43,6 +48,19 @@ pub fn add(song: Song) -> Result<(), String> {
     let mut songs = load()?;
     songs.push(song);
     save(&songs)
+}
+
+/// Update a song's metronome downbeat offset and persist it.
+pub fn update_metronome_offset(song_id: &str, offset: Option<f64>) -> Result<Song, String> {
+    let mut songs = load()?;
+    let song = songs
+        .iter_mut()
+        .find(|s| s.id == song_id)
+        .ok_or_else(|| format!("Song not found: {song_id}"))?;
+    song.metronome_offset = offset;
+    let updated = song.clone();
+    save(&songs)?;
+    Ok(updated)
 }
 
 /// Remove a song from the library and delete its directory.
