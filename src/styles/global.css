@@ -1603,6 +1603,13 @@ body,
   padding: 0.4rem;
 }
 
+/* Wraps the ruler + stem/take rows; ctrl/shift+wheel listener attaches here. */
+.stem-view__timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .analyzer-page__download-all,
 .analyzer-page__export-mix {
   flex-shrink: 0;
