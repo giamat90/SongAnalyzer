@@ -65,6 +65,11 @@ export async function renameTakeApi(songId: string, takeId: string, name: string
   return invoke<Take>("rename_take", { songId, takeId, name });
 }
 
+/** Persist the metronome's downbeat anchor (song time, seconds) for this song; null clears it back to song start */
+export async function setMetronomeOffsetApi(songId: string, offset: number | null): Promise<Song> {
+  return invoke<Song>("set_metronome_offset", { songId, offset });
+}
+
 /** Open a native Save As dialog and export a take as WAV */
 export async function exportTake(takePath: string, suggestedName: string): Promise<void> {
   return invoke("export_take", { takePath, suggestedName });

@@ -130,6 +130,7 @@ pub async fn process_song(
                     processed_at: now,
                     directory: output_dir_str,
                     stems,
+                    metronome_offset: None,
                 };
 
                 library::add(song.clone())?;
@@ -165,6 +166,11 @@ pub async fn list_songs() -> Result<Vec<Song>, String> {
 #[tauri::command]
 pub async fn delete_song(song_id: String) -> Result<(), String> {
     library::remove(&song_id)
+}
+
+#[tauri::command]
+pub async fn set_metronome_offset(song_id: String, offset: Option<f64>) -> Result<Song, String> {
+    library::update_metronome_offset(&song_id, offset)
 }
 
 #[tauri::command]
@@ -256,6 +262,7 @@ pub async fn import_youtube(
                     processed_at: chrono::Utc::now().to_rfc3339(),
                     directory: output_dir_str,
                     stems,
+                    metronome_offset: None,
                 };
 
                 library::add(song.clone())?;
