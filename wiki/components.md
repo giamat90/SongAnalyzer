@@ -75,6 +75,8 @@ const togglePlay = usePlayerStore((s) => s.togglePlay);
 | `takes` / `activeTakeId` / `takeVolume` | | Recorded takes + active selection |
 | `recordingOffsets` | `Record<string, CalibrationEntry>` | Per-device latency calibration `{ offset, stale?, madMs? }`, localStorage-backed |
 | `usedLatencyFallback` | `boolean` | True when recording started without a usable calibration |
+| `minPxPerSec` | `number` | Timeline zoom level (WaveSurfer's own px-per-second unit); ctrl+wheel changes this |
+| `scrollTime` | `number` | Song time (seconds) at the left edge of the visible timeline window; shift+wheel changes this |
 
 See [Recording Flow](recording-flow.md) for the recording state machine and latency compensation.
 
@@ -87,6 +89,15 @@ See [Recording Flow](recording-flow.md) for the recording state machine and late
 ### StemView
 
 Mounts/destroys the `AudioEngine` whenever `song.id` changes. Iterates `song.stems` and renders one `StemTrack` per stem, plus a `TakeTrack` when a take is selected, and `TimeRuler` at the top. Does **not** render Export Mix or Download All — those live in `AnalyzerPage.tsx`'s header (see below), not here.
+
+#### Timeline Zoom/Pan
+
+`TimeRuler`, the stem rows, and the take row are wrapped in a new `.stem-view__timeline` element (`ref`'d as `timelineRef`), which owns two `useEffect`-mounted listeners:
+
+- A **non-passive `wheel` listener** (`addEventListener("wheel", handler, { passive: false })` — React's `onWheel` prop is passive since React 17 and can't `preventDefault()` native ctrl+wheel page-zoom). Ctrl+wheel calls `computeZoomToCursor()` (`src/lib/zoomPan.ts`) with the cursor's pixel offset within the wrapper, then `eng.zoomAll(newPx, newScroll)`; shift+wheel calls `computePan()` then `eng.setScrollAll(newScroll)`. Both cases call `eng.noteManualScrollInteraction()` first, suppressing the engine's playhead auto-follow (see [Audio Engine: Timeline Zoom/Pan](audio-engine.md#timeline-zoompan)) for 800ms. Wheel events without `ctrlKey`/`shiftKey` are ignored (not `preventDefault()`-ed), so ordinary page scroll/zoom over the timeline behaves normally.
+- A **`ResizeObserver`** that reclamps `scrollTime` into bounds and snaps `minPxPerSec` up to the new dynamic "whole song fits" floor if the container shrank, since both depend on live container width.
+
+`src/lib/zoomPan.ts` holds the pure math (byte-identical to VPS's copy): `computeZoomToCursor()` keeps the exact song-time under the mouse cursor fixed on screen while `minPxPerSec` changes by an exponential factor of wheel delta (`Math.exp(-deltaY * ZOOM_SENSITIVITY)` — proportional zoom feels consistent regardless of current zoom level, unlike a fixed additive step); `computePan()` shifts `scrollTime` by `deltaPx / minPxPerSec`. Both clamp `scrollTime` into `[0, max(0, duration - viewportWidthPx/minPxPerSec)]` and `minPxPerSec` into `[dynamicLowerBound, MAX_PX_PER_SEC]` — the lower bound comes from `eng.getMinPxPerSec()` (the "whole song fills the container" floor), so zooming out can never scroll past the song's edges.
 
 ### ExportMixButton / DownloadAllButton
 
@@ -103,9 +114,11 @@ Single stem row. Contains:
 - A volume slider that calls `engine.setStemVolume(name, value)`
 - A download button that calls `exportStem(songId, stemName)` via a native Save-As dialog
 
+Its `.stem-track__body` wrapper (`position: relative`, `overflow: hidden`) clips `PunchOverlay` — now positioned in pixels (`left`/`width` derived from `minPxPerSec`/`scrollTime`, not a percentage of the row's raw width — see [Timeline Zoom/Pan](#timeline-zoompan) above) — when the punch region extends off-screen under zoom/pan. `.stem-track__body` already had `overflow: hidden` before zoom/pan existed, so no CSS change was needed here (unlike VPS, where the equivalent `.waveform__track-body` rule had to gain it).
+
 ### TakeTrack
 
-Extra row rendered when `activeTakeId` is set. Loads the take into the engine via `loadTakeTrack(path, container, startOffset, audioOffset)` so it plays aligned at its `startPosition`; visually positioned/sized proportionally to the song timeline.
+Extra row rendered when `activeTakeId` is set. Loads the take into the engine via `loadTakeTrack(path, container, startOffset, audioOffset)` so it plays aligned at its `startPosition`; visually positioned/sized in pixels derived from the current zoom/scroll (`_resizeTakeTrack()` in the engine — see [Audio Engine: Take Track](audio-engine.md#take-track)), not a fixed ratio. Its own `PunchOverlay` copy gets the same pixel-positioning treatment as `StemTrack`'s.
 
 ### Recording components (`src/components/recording/`)
 
@@ -125,6 +138,8 @@ Auto-update modal backed by `src/stores/updater.ts` and `tauri-plugin-updater`: 
 ### TimeRuler
 
 Canvas strip above all stem tracks. Shows time ticks at adaptive intervals (≥80 px target). Drag to draw/edit the loop region; click to clear. The ⟳ button toggles `punchLoop`. See [Loop Region & Playback](recording-flow.md) for full interaction details.
+
+All of `tX`/`xToTime` (coordinate mapping), `modeForOffset` (handle hit-testing), and the tick-drawing loop read `minPxPerSec`/`scrollTime` from the player store instead of assuming the whole song spans the full canvas width — tick spacing gets finer as zoom increases (`tickInterval` is computed from the *visible* duration, `canvasWidthPx / minPxPerSec`, not the song's total duration), and only the visible time range is drawn. See [Timeline Zoom/Pan](#timeline-zoompan) above.
 
 ### TransportControls
 

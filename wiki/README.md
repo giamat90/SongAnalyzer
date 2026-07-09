@@ -7,7 +7,7 @@
 | Page | Description |
 |------|-------------|
 | [Architecture](architecture.md) | 3-tier system overview: React → Tauri → Python sidecar |
-| [Audio Engine](audio-engine.md) | Dynamic stems Map + take track, click-to-seek sync, rAF loop, output routing |
+| [Audio Engine](audio-engine.md) | Dynamic stems Map + take track, click-to-seek sync, rAF loop, output routing, timeline zoom/pan |
 | [Recording & Loop Region](recording-flow.md) | TimeRuler punch region, recording lifecycle, latency compensation |
 | [Data Model](data-model.md) | TypeScript interfaces (Song, Take), Rust structs, and library storage layout |
 | [Python Sidecar](python-sidecar.md) | JSON-lines IPC, stem separation, BPM + key detection, take normalization, mixdown |
