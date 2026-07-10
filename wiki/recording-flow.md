@@ -14,9 +14,10 @@ The `TimeRuler` (canvas strip above the waveform tracks) doubles as a loop regio
 | **Drag near In handle** (±8 px) | Move only the In boundary; Out stays fixed |
 | **Drag near Out handle** (±8 px) | Move only the Out boundary; In stays fixed |
 | **Click** (drag < 0.5 s) | Clear the region and reset loop toggle |
-| **⟳ button** (right edge) | Toggle region loop on/off |
 
 The cursor changes to `ew-resize` when hovering over a handle, `crosshair` elsewhere.
+
+The loop toggle itself is **not** a ruler button — it's `LoopButton.tsx` (`src/components/player/`), rendered next to `TransportControls` in `AnalyzerPage.tsx`'s topbar (see `wiki/components.md#loopbutton`). It used to be an in-ruler `⟳` button, ported from VPS's equivalent (moved on both sides 2026-07-10).
 
 ### Region State (player store, memory only — not persisted)
 
@@ -30,12 +31,13 @@ The cursor changes to `ew-resize` when hovering over a handle, `crosshair` elsew
 
 When `punchIn` is set, pressing **Play** always seeks to `punchIn` first.
 
-The rAF tick in `AudioEngine` checks `punchOut` on every frame:
+`onTimeUpdate` in `stores/player.ts` (not the engine's rAF tick — that only handles `_loopStart`/`_loopEnd`, the separate legacy A/B loop with no UI exposed) checks `punchOut` on every frame:
 
 ```ts
-if (punchOut !== null && currentTime >= punchOut) {
-  if (punchLoop)  → eng.seekTo(punchIn)        // loop: jump back
-  else            → pause + seekTo(punchIn)    // stop and rewind
+if (punchOut !== null && time >= punchOut) {
+  if (isRecording)       → stopRecording()           // save take
+  else if (punchLoop)    → eng.seekTo(punchIn)        // loop: jump back
+  else                   → pause + seekTo(punchIn)    // stop and rewind
 }
 ```
 

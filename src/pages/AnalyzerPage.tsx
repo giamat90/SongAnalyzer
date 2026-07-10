@@ -3,6 +3,7 @@ import StemView from "../components/player/StemView";
 import DownloadAllButton from "../components/player/DownloadAllButton";
 import ExportMixButton from "../components/player/ExportMixButton";
 import TransportControls from "../components/player/TransportControls";
+import LoopButton from "../components/player/LoopButton";
 import TempoControl from "../components/player/TempoControl";
 import MicSelector from "../components/recording/MicSelector";
 import OutputSelector from "../components/player/OutputSelector";
@@ -55,6 +56,7 @@ function AnalyzerPage({ songId, onBack }: AnalyzerPageProps) {
 
       <div className="analyzer-page__topbar">
         <TransportControls />
+        <LoopButton />
         <TempoControl detectedBpm={song.detectedBpm} />
         <div className="analyzer-page__io-group">
           <MicSelector />

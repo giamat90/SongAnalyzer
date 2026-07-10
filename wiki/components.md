@@ -138,13 +138,19 @@ Auto-update modal backed by `src/stores/updater.ts` and `tauri-plugin-updater`: 
 
 ### TimeRuler
 
-Canvas strip above all stem tracks. Shows time ticks at adaptive intervals (≥80 px target). Drag to draw/edit the loop region; click to clear. The ⟳ button toggles `punchLoop`. See [Loop Region & Playback](recording-flow.md) for full interaction details. Also draws a draggable blue downbeat marker (dashed line + flag at the bottom edge) for the metronome's phase-lock anchor, hit-tested with priority over the loop-region drag modes — see [Metronome: Downbeat offset](#tempocontrol).
+Canvas strip above all stem tracks. Shows time ticks at adaptive intervals (≥80 px target). Drag to draw/edit the loop region; click to clear. Toggling the loop itself is done from [LoopButton](#loopbutton), not a button on this ruler (moved 2026-07-10 — see that section). See [Loop Region & Playback](recording-flow.md) for full interaction details. Also draws a draggable blue downbeat marker (dashed line + flag at the bottom edge) for the metronome's phase-lock anchor, hit-tested with priority over the loop-region drag modes — see [Metronome: Downbeat offset](#tempocontrol).
 
 All of `tX`/`xToTime` (coordinate mapping), `modeForOffset` (handle hit-testing), and the tick-drawing loop read `minPxPerSec`/`scrollTime` from the player store instead of assuming the whole song spans the full canvas width — tick spacing gets finer as zoom increases (`tickInterval` is computed from the *visible* duration, `canvasWidthPx / minPxPerSec`, not the song's total duration), and only the visible time range is drawn. See [Timeline Zoom/Pan](#timeline-zoompan) above.
 
 ### TransportControls
 
 Play/pause/stop buttons + current time display. Stop seeks to 0. Time is read from the player store's `currentTime` (updated at ~30 fps from the rAF loop).
+
+### LoopButton
+
+Standalone component (`src/components/player/LoopButton.tsx`), ported from VPS unchanged apart from field names already matching — reads `punchIn`/`punchOut`/`punchLoop`/`isRecording`/`setPunchLoop` directly from `usePlayerStore`, no props. Always rendered — a circular `⟳` toggle, red-tinted (`.loop-btn--active`) when `punchLoop` is true, `disabled` (dimmed, `opacity: 0.4`) whenever there's no loop region set or while recording, so it stays a stable landmark in the topbar rather than appearing/disappearing. Rendered in `AnalyzerPage.tsx`'s topbar directly after `<TransportControls />`.
+
+Previously `TimeRuler.tsx` rendered its own in-ruler `⟳` with no `isRecording` guard (unlike VPS's, which already hid the button during recording). Moving it here added that guard for parity — cosmetic only, since the `isRecording` branch in `onTimeUpdate`'s punch-out handler already takes priority over `punchLoop` regardless of the button's visibility (recording always auto-stops at punch-out; it never loops).
 
 ### TempoControl
 
