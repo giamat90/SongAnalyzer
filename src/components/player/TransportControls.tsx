@@ -12,10 +12,21 @@ function TransportControls() {
   const duration    = usePlayerStore((s) => s.duration);
   const togglePlay  = usePlayerStore((s) => s.togglePlay);
   const stop        = usePlayerStore((s) => s.stop);
+  const isRecording = usePlayerStore((s) => s.isRecording);
+  const skipToStart = usePlayerStore((s) => s.skipToStart);
+  const skipToEnd   = usePlayerStore((s) => s.skipToEnd);
 
   return (
     <div className="transport">
       <div className="transport__playback">
+        <button
+          className="transport__btn"
+          onClick={skipToStart}
+          disabled={isRecording}
+          title="Skip to start"
+        >
+          &#9198;
+        </button>
         <button className="transport__btn" onClick={stop} title="Stop">
           &#9632;
         </button>
@@ -25,6 +36,14 @@ function TransportControls() {
           title={isPlaying ? "Pause" : "Play"}
         >
           {isPlaying ? "❚❚" : "▶"}
+        </button>
+        <button
+          className="transport__btn"
+          onClick={skipToEnd}
+          disabled={isRecording}
+          title="Skip to end"
+        >
+          &#9197;
         </button>
         <span className="transport__time">
           {formatTime(currentTime)} / {formatTime(duration)}
