@@ -1,59 +1,42 @@
-import { useEffect, useState } from "react";
 import { usePlayerStore } from "../../stores/player";
-import { readSongChords } from "../../lib/tauri";
-import type { ChordSegment, Song } from "../../lib/types";
+import { useChordSegments, formatChordName } from "../../lib/chords";
+import type { Song } from "../../lib/types";
 
 interface ChordRowProps {
   song: Song;
 }
 
-function findActiveIndex(segments: ChordSegment[], time: number): number {
-  let lo = 0;
-  let hi = segments.length - 1;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    const seg = segments[mid];
-    if (time < seg.start) hi = mid - 1;
-    else if (time >= seg.end) lo = mid + 1;
-    else return mid;
-  }
-  return -1;
-}
-
-/** Chord name like "C:maj" / "A:min" -> "C" / "Am" */
-function formatChord(chord: string): string {
-  const [root, quality] = chord.split(":");
-  return quality === "min" ? `${root}m` : root;
-}
+// Below this width a label can't render without clipping into an
+// unreadable smear against its neighbors, so narrow, non-active segments
+// fall back to an unlabeled tick mark at their boundary.
+const MIN_LABEL_PX = 28;
 
 export default function ChordRow({ song }: ChordRowProps) {
-  const currentTime = usePlayerStore((s) => s.currentTime);
-  const [segments, setSegments] = useState<ChordSegment[]>([]);
+  const minPxPerSec = usePlayerStore((s) => s.minPxPerSec);
+  const scrollTime  = usePlayerStore((s) => s.scrollTime);
+  const { segments, activeIndex } = useChordSegments(song);
 
-  useEffect(() => {
-    setSegments([]);
-    if (!song.hasChords) return;
-    let cancelled = false;
-    readSongChords(song.id)
-      .then((result) => { if (!cancelled) setSegments(result); })
-      .catch((e: unknown) => console.error("[ChordRow] readSongChords failed:", e));
-    return () => { cancelled = true; };
-  }, [song.id, song.hasChords]);
-
-  if (segments.length === 0) return null;
-
-  const activeIndex = findActiveIndex(segments, currentTime);
+  if (segments.length === 0 || minPxPerSec <= 0) return null;
 
   return (
     <div className="chord-row">
-      {segments.map((seg, i) => (
-        <span
-          key={`${seg.start}-${seg.chord}`}
-          className={`chord-row__chip${i === activeIndex ? " chord-row__chip--active" : ""}`}
-        >
-          {formatChord(seg.chord)}
-        </span>
-      ))}
+      {segments.map((seg, i) => {
+        const isActive = i === activeIndex;
+        const width = (seg.end - seg.start) * minPxPerSec;
+        const showLabel = isActive || width >= MIN_LABEL_PX;
+        return (
+          <span
+            key={`${seg.start}-${seg.chord}`}
+            className={`chord-row__chip${isActive ? " chord-row__chip--active" : ""}`}
+            style={{
+              left: `${(seg.start - scrollTime) * minPxPerSec}px`,
+              width: `${width}px`,
+            }}
+          >
+            {showLabel ? formatChordName(seg.chord) : null}
+          </span>
+        );
+      })}
     </div>
   );
 }

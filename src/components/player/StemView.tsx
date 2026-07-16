@@ -126,8 +126,8 @@ function StemView({ song }: StemViewProps) {
   return (
     <div className="stem-view">
       {loadError && <div className="stem-view__error">{loadError}</div>}
-      <ChordRow song={song} />
       <div className="stem-view__timeline" ref={timelineRef}>
+        <ChordRow song={song} />
         <TimeRuler />
         {song.stems.map((name) => (
           <StemTrack

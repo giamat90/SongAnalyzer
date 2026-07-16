@@ -714,25 +714,42 @@ body,
 }
 
 /* Chord row above the time ruler */
+/* Positioned like the ruler/waveform tracks below it: chips sit at their
+   actual song-time offset via left/width computed from minPxPerSec/scrollTime,
+   so the strip scrolls and zooms in lockstep with the timeline. */
 .chord-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  padding: 0.2rem 0;
+  position: relative;
+  width: 100%;
+  height: 1.6rem;
+  overflow: hidden;
 }
 
 .chord-row__chip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
   font-size: 0.75rem;
   color: var(--text-secondary);
-  border: 1px solid transparent;
-  border-radius: 0.25rem;
-  padding: 0.1rem 0.4rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0 0.3rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
+/* The currently-playing chord always gets a legible label, even when its
+   own segment is too narrow to hold one at the current zoom level. */
 .chord-row__chip--active {
+  overflow: visible;
+  z-index: 1;
   color: var(--text-primary);
-  border-color: #e94560;
-  background: rgba(233, 69, 96, 0.12);
+  border-left-color: #e94560;
+  background: rgba(233, 69, 96, 0.14);
+  border-radius: 0.2rem;
 }
 
 /* Time ruler above the waveform tracks */
@@ -1652,6 +1669,36 @@ body,
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+}
+
+/* Now-playing chord badge, sitting in the sticky topbar so it stays visible
+   regardless of timeline scroll position. */
+.now-playing-chord {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-left: auto;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid rgba(233, 69, 96, 0.4);
+  border-radius: 0.5rem;
+  background: rgba(233, 69, 96, 0.08);
+  box-shadow: 0 0 12px rgba(233, 69, 96, 0.15);
+}
+
+.now-playing-chord__label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+
+.now-playing-chord__value {
+  font-family: monospace;
+  font-size: 1.3rem;
+  font-weight: 700;
+  line-height: 1;
+  color: #e94560;
+  text-shadow: 0 0 10px rgba(233, 69, 96, 0.5);
 }
 
 /* Stem View */

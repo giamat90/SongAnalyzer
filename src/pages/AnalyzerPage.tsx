@@ -5,6 +5,7 @@ import ExportMixButton from "../components/player/ExportMixButton";
 import TransportControls from "../components/player/TransportControls";
 import LoopButton from "../components/player/LoopButton";
 import TempoControl from "../components/player/TempoControl";
+import NowPlayingChord from "../components/player/NowPlayingChord";
 import MicSelector from "../components/recording/MicSelector";
 import OutputSelector from "../components/player/OutputSelector";
 import RecordButton from "../components/recording/RecordButton";
@@ -63,6 +64,7 @@ function AnalyzerPage({ songId, onBack }: AnalyzerPageProps) {
           <OutputSelector />
         </div>
         <RecordButton />
+        <NowPlayingChord song={song} />
       </div>
 
       <div className="analyzer-page__body">
