@@ -22,6 +22,20 @@ export function formatChordName(chord: string): string {
   return quality === "min" ? `${root}m` : root;
 }
 
+/**
+ * Index of the segment to treat as the "current" pointer even when nothing
+ * is actively playing (leading silence before the first chord, or a gap
+ * between segments): the nearest upcoming segment, falling back to the last
+ * segment once playback runs past the end of the detected chords.
+ */
+export function findNearestChordIndex(segments: ChordSegment[], time: number): number {
+  if (segments.length === 0) return -1;
+  const active = findActiveChordIndex(segments, time);
+  if (active >= 0) return active;
+  const next = segments.findIndex((seg) => seg.start > time);
+  return next >= 0 ? next : segments.length - 1;
+}
+
 /** Loads a song's detected chord segments once and tracks which one is currently playing. */
 export function useChordSegments(song: Song) {
   const currentTime = usePlayerStore((s) => s.currentTime);
@@ -38,5 +52,11 @@ export function useChordSegments(song: Song) {
   }, [song.id, song.hasChords]);
 
   const activeIndex = findActiveChordIndex(segments, currentTime);
-  return { segments, activeIndex, activeChord: activeIndex >= 0 ? segments[activeIndex] : null };
+  const centerIndex = findNearestChordIndex(segments, currentTime);
+  return {
+    segments,
+    activeIndex,
+    centerIndex,
+    activeChord: activeIndex >= 0 ? segments[activeIndex] : null,
+  };
 }

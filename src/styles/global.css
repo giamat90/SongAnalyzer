@@ -1671,34 +1671,74 @@ body,
   gap: 0.35rem;
 }
 
-/* Now-playing chord badge, sitting in the sticky topbar so it stays visible
-   regardless of timeline scroll position. */
-.now-playing-chord {
+/* Chord carousel, sitting in the sticky topbar so it stays visible regardless
+   of timeline scroll position. A gear-like dial: the center slot is "now",
+   past chords recede to the left, upcoming ones approach from the right —
+   each slot tilts/scales/fades by its distance (--dist/--dist-abs, set
+   inline per slot) from center, like teeth curving away around a wheel. */
+.chord-carousel {
+  position: relative;
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  justify-content: center;
   gap: 0.5rem;
   margin-left: auto;
-  padding: 0.3rem 0.8rem;
+  padding: 0.5rem 1rem;
+  perspective: 50rem;
+}
+
+.chord-carousel__slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.2rem;
+  height: 2.2rem;
+  box-sizing: border-box;
+  font-family: monospace;
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--text-secondary);
+  transform:
+    translateX(calc(var(--dist) * -0.45rem))
+    scale(calc(1 - var(--dist-abs) * 0.18))
+    rotateY(calc(var(--dist) * -14deg));
+  opacity: calc(1 - var(--dist-abs) * 0.32);
+  transition: transform 0.35s ease, opacity 0.35s ease, color 0.35s ease, background 0.35s ease;
+}
+
+/* Center slot is always the "now" position on the dial, even while nothing
+   is actively playing (leading silence, gap between segments) — a small
+   pointer tick beneath it marks that spot regardless of --active state. */
+.chord-carousel__slot--now {
+  position: relative;
+  font-size: 1.3rem;
+  color: var(--text-primary);
+}
+
+.chord-carousel__slot--now::after {
+  content: "";
+  position: absolute;
+  bottom: -0.4rem;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 0.3rem solid transparent;
+  border-right: 0.3rem solid transparent;
+  border-top: 0.3rem solid rgba(233, 69, 96, 0.35);
+  transition: border-top-color 0.35s ease;
+}
+
+/* The chord actually playing right now gets the full evidenced treatment. */
+.chord-carousel__slot--active {
+  color: #e94560;
+  text-shadow: 0 0 10px rgba(233, 69, 96, 0.5);
+  background: rgba(233, 69, 96, 0.14);
   border: 1px solid rgba(233, 69, 96, 0.4);
-  border-radius: 0.5rem;
-  background: rgba(233, 69, 96, 0.08);
+  border-radius: 0.4rem;
   box-shadow: 0 0 12px rgba(233, 69, 96, 0.15);
 }
 
-.now-playing-chord__label {
-  font-size: 0.65rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-secondary);
-}
-
-.now-playing-chord__value {
-  font-family: monospace;
-  font-size: 1.3rem;
-  font-weight: 700;
-  line-height: 1;
-  color: #e94560;
-  text-shadow: 0 0 10px rgba(233, 69, 96, 0.5);
+.chord-carousel__slot--active::after {
+  border-top-color: #e94560;
 }
 
 /* Stem View */
