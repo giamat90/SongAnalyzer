@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePlayerStore, getEngine } from "../../stores/player";
 import TimeRuler from "./TimeRuler";
+import ChordRow from "./ChordRow";
 import StemTrack from "./StemTrack";
 import TakeTrack from "./TakeTrack";
 import type { Song } from "../../lib/types";
@@ -126,6 +127,7 @@ function StemView({ song }: StemViewProps) {
     <div className="stem-view">
       {loadError && <div className="stem-view__error">{loadError}</div>}
       <div className="stem-view__timeline" ref={timelineRef}>
+        <ChordRow song={song} />
         <TimeRuler />
         {song.stems.map((name) => (
           <StemTrack

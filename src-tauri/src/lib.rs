@@ -26,6 +26,7 @@ pub fn run() {
             commands::rename_take,
             commands::export_take,
             commands::export_mix,
+            commands::read_song_chords,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

@@ -20,6 +20,17 @@ pub struct Song {
     // a pickup) before it, instead of always starting at song position 0.
     #[serde(default)]
     pub metronome_offset: Option<f64>,
+    #[serde(default)]
+    pub has_chords: bool,
+}
+
+/// A single detected chord segment, read on demand from `chords.json`.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChordSegment {
+    pub start: f64,
+    pub end: f64,
+    pub chord: String,
 }
 
 fn library_path() -> std::path::PathBuf {
@@ -61,6 +72,24 @@ pub fn update_metronome_offset(song_id: &str, offset: Option<f64>) -> Result<Son
     let updated = song.clone();
     save(&songs)?;
     Ok(updated)
+}
+
+#[derive(Deserialize)]
+struct ChordsFile {
+    segments: Vec<ChordSegment>,
+}
+
+/// Read the detected chord segments for a song from its `chords.json`.
+pub fn read_chords(song_id: &str) -> Result<Vec<ChordSegment>, String> {
+    let songs = load()?;
+    let song = songs
+        .iter()
+        .find(|s| s.id == song_id)
+        .ok_or_else(|| format!("Song not found: {song_id}"))?;
+    let path = std::path::Path::new(&song.directory).join("chords.json");
+    let data = fs::read_to_string(&path).map_err(|e| format!("Read chords: {e}"))?;
+    let parsed: ChordsFile = serde_json::from_str(&data).map_err(|e| format!("Parse chords: {e}"))?;
+    Ok(parsed.segments)
 }
 
 /// Remove a song from the library and delete its directory.

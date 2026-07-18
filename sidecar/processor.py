@@ -51,6 +51,19 @@ MAJOR_PROFILE = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 
 MINOR_PROFILE = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
 NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
+# Binary triad templates (root + third + fifth) for chord recognition.
+# Unlike MAJOR_PROFILE/MINOR_PROFILE (Krumhansl-Kessler, tuned for whole-piece
+# tonal-center perception), these match a single chord's pitch-class content —
+# rotated through all 12 roots to build the 24 major/minor chord templates.
+_MAJOR_TRIAD = np.array([1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0])
+_MINOR_TRIAD = np.array([1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0])
+CHORD_TEMPLATES = {
+    f"{NOTE_NAMES[shift]}:maj": np.roll(_MAJOR_TRIAD, shift) for shift in range(12)
+}
+CHORD_TEMPLATES.update({
+    f"{NOTE_NAMES[shift]}:min": np.roll(_MINOR_TRIAD, shift) for shift in range(12)
+})
+
 BASS_OPEN_MIDI = [28, 33, 38, 43]
 BASS_MAX_FRET  = 24
 
@@ -154,6 +167,80 @@ def _detect_key_chroma(input_path: str) -> str:
     except Exception as e:
         _log(f"Key detection error: {e}\n{traceback.format_exc()}")
         return "Unknown"
+
+
+# RMS threshold (relative to the track's own max RMS) below which a window is
+# considered silence/no-chord rather than forced into the nearest template.
+_NO_CHORD_RMS_RATIO = 0.05
+_NO_CHORD_LABEL = "N"
+
+
+def _detect_chords_chroma(input_path: str, hop_seconds: float = 1.0) -> list:
+    """
+    Windowed chroma → chord-template matching over the whole song.
+    Returns a list of {"start", "end", "chord"} segments (chord like "C:maj").
+    """
+    y, sr = librosa.load(input_path, sr=SAMPLE_RATE, mono=True)
+
+    hop_length  = 512
+    frame_dur   = hop_length / sr
+    frames_per_window = max(1, round(hop_seconds / frame_dur))
+
+    chroma = librosa.feature.chroma_cqt(y=y, sr=sr, hop_length=hop_length)
+    rms    = librosa.feature.rms(y=y, hop_length=hop_length)[0]
+    n_frames = chroma.shape[1]
+
+    template_names   = list(CHORD_TEMPLATES.keys())
+    template_matrix  = np.stack([CHORD_TEMPLATES[n] for n in template_names])
+    template_norms   = template_matrix / (np.linalg.norm(template_matrix, axis=1, keepdims=True) + 1e-9)
+
+    max_rms = float(rms.max()) if len(rms) else 0.0
+
+    window_labels = []
+    window_times  = []
+    i = 0
+    while i < n_frames:
+        j = min(i + frames_per_window, n_frames)
+        chroma_win = chroma[:, i:j].mean(axis=1)
+        rms_win    = float(rms[i:j].mean()) if j > i else 0.0
+
+        if max_rms <= 0 or rms_win < _NO_CHORD_RMS_RATIO * max_rms:
+            label = _NO_CHORD_LABEL
+        else:
+            norm = np.linalg.norm(chroma_win) + 1e-9
+            scores = template_norms @ (chroma_win / norm)
+            label  = template_names[int(np.argmax(scores))]
+
+        window_labels.append(label)
+        window_times.append(i * frame_dur)
+        i = j
+
+    # Median-filter to suppress single-window flicker.
+    filt_window = 3
+    if len(window_labels) >= filt_window:
+        from collections import Counter
+        smoothed = list(window_labels)
+        half = filt_window // 2
+        for idx in range(half, len(window_labels) - half):
+            neighborhood = window_labels[idx - half: idx + half + 1]
+            smoothed[idx] = Counter(neighborhood).most_common(1)[0][0]
+        window_labels = smoothed
+
+    # Merge consecutive identical labels into segments, dropping "N".
+    duration = n_frames * frame_dur
+    segments = []
+    seg_start = window_times[0] if window_times else 0.0
+    seg_label = window_labels[0] if window_labels else _NO_CHORD_LABEL
+    for t, label in zip(window_times[1:], window_labels[1:]):
+        if label != seg_label:
+            if seg_label != _NO_CHORD_LABEL:
+                segments.append({"start": round(seg_start, 3), "end": round(t, 3), "chord": seg_label})
+            seg_start = t
+            seg_label = label
+    if window_labels and seg_label != _NO_CHORD_LABEL:
+        segments.append({"start": round(seg_start, 3), "end": round(duration, 3), "chord": seg_label})
+
+    return segments
 
 
 def _assign_fret(midi_pitch: int, prev_string: int, prev_fret: int) -> tuple:
@@ -361,9 +448,26 @@ def process(
     on_progress(0.92, "key-detection")
 
     # ===================================================================
-    # Stage 4: Bass tab transcription (0.92 – 1.00)
+    # Stage 4: Chord detection (0.92 – 0.96)
     # ===================================================================
-    on_progress(0.92, "bass-tab")
+    on_progress(0.92, "chord-detection")
+    _log("Detecting chords...")
+    chords_written = False
+    try:
+        chord_segments = _detect_chords_chroma(input_path)
+        chords_path = os.path.join(output_dir, "chords.json")
+        with open(chords_path, "w", encoding="utf-8") as f:
+            json.dump({"version": 1, "duration": duration, "segments": chord_segments}, f)
+        _log(f"Chords written: {len(chord_segments)} segments → {chords_path}")
+        chords_written = True
+    except Exception as e:
+        _log(f"Chord detection error (non-fatal): {e}\n{traceback.format_exc()}")
+    on_progress(0.96, "chord-detection")
+
+    # ===================================================================
+    # Stage 5: Bass tab transcription (0.96 – 1.00)
+    # ===================================================================
+    on_progress(0.96, "bass-tab")
     bass_tab_written = False
     if "bass" in stem_paths:
         _log("Transcribing bass tab...")
@@ -386,5 +490,6 @@ def process(
         "duration":    duration,
         "detectedBpm": detected_bpm,
         "detectedKey": detected_key,
+        "chords":      chords_written,
         "bassTab":     bass_tab_written,
     }
