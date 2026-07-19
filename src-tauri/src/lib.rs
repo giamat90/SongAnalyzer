@@ -24,6 +24,7 @@ pub fn run() {
             commands::list_takes,
             commands::delete_take,
             commands::rename_take,
+            commands::set_take_manual_offset,
             commands::export_take,
             commands::export_mix,
             commands::read_song_chords,

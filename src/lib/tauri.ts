@@ -75,6 +75,11 @@ export async function setMetronomeOffsetApi(songId: string, offset: number | nul
   return invoke<Song>("set_metronome_offset", { songId, offset });
 }
 
+/** Persist a manual drag nudge (seconds, signed) on top of a take's auto-detected startPosition; 0 clears it back to that position */
+export async function setTakeManualOffsetApi(songId: string, takeId: string, offset: number): Promise<Take> {
+  return invoke<Take>("set_take_manual_offset", { songId, takeId, offset });
+}
+
 /** Open a native Save As dialog and export a take as WAV */
 export async function exportTake(takePath: string, suggestedName: string): Promise<void> {
   return invoke("export_take", { takePath, suggestedName });
@@ -86,6 +91,7 @@ export interface MixSource {
   isTake: boolean;
   startPosition?: number;
   audioOffset?: number;
+  manualOffset?: number;
 }
 
 /**

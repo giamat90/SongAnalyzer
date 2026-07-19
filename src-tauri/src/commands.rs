@@ -474,6 +474,7 @@ pub async fn save_take(
         name: None,
         start_position,
         audio_offset,
+        manual_offset: 0.0,
     };
 
     takes::add(&song_id, take.clone())?;
@@ -493,6 +494,11 @@ pub async fn delete_take(song_id: String, take_id: String) -> Result<(), String>
 #[tauri::command]
 pub async fn rename_take(song_id: String, take_id: String, name: String) -> Result<Take, String> {
     takes::rename(&song_id, &take_id, &name)
+}
+
+#[tauri::command]
+pub async fn set_take_manual_offset(song_id: String, take_id: String, offset: f64) -> Result<Take, String> {
+    takes::set_manual_offset(&song_id, &take_id, offset)
 }
 
 /// Deletes the wrapped temp file when dropped.
@@ -579,6 +585,7 @@ pub struct MixSource {
     pub is_take: bool,
     pub start_position: Option<f64>,
     pub audio_offset: Option<f64>,
+    pub manual_offset: Option<f64>,
 }
 
 #[tauri::command]
