@@ -33,10 +33,13 @@ interface Take {
   name?: string;          // user-assigned; UI falls back to "Take N"
   startPosition: number;  // song time (seconds) where recording began; 0 for full-song takes
   audioOffset?: number;   // seconds into the file to skip on playback (latency compensation overflow)
+  manualOffset?: number;  // seconds, signed; user drag nudge on top of startPosition (see Manual Take Sync)
 }
 ```
 
 Unlike VPS's `Take`, there are no analysis fields (`pitchData`, `vibrato`, …) — SPS does no take analysis.
+
+**`manualOffset`** — set via `set_take_manual_offset(songId, takeId, offset)` (mirrors `rename_take`'s "find by id, mutate one field, re-save takes.json" shape), a post-recording user adjustment layered additively on top of `startPosition`, distinct from and independent of `audioOffset`'s one-time auto-latency-compensation. `0`/absent means the take sits at its auto-detected position. See [Audio Engine: Manual Take Sync](audio-engine.md#manual-take-sync) and [Components: Take Sync Controls](components.md#take-sync-controls).
 
 ### StemName
 
@@ -91,6 +94,7 @@ All data lives under `~/.songpracticestudio/` (`C:\Users\{user}\.songpracticestu
 | `list_takes` | `songId: string` | `Take[]` |
 | `delete_take` | `songId, takeId: string` | `void` |
 | `rename_take` | `songId, takeId, name: string` | `Take` (empty/whitespace name resets to default) |
+| `set_take_manual_offset` | `songId, takeId, offset: f64` | `Take` (`0` resets to the auto-detected position) |
 | `export_stem` | `stemPath, suggestedName: string` | `void` (native Save-As dialog) |
 | `export_take` | `takePath, suggestedName: string` | `void` (always WAV; sidecar `convert_take` first) |
 | `export_mix` | `sources: MixSource[], startSec, endSec: f64, suggestedName: string` | `void` (sidecar `mix_export`, then Save-As) |
