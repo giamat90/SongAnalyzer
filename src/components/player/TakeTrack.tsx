@@ -1,5 +1,5 @@
-import { useState, type RefCallback } from "react";
-import { usePlayerStore, TAKE_TRACK_KEY } from "../../stores/player";
+import { useRef, useState, type RefCallback } from "react";
+import { usePlayerStore, getEngine, TAKE_TRACK_KEY } from "../../stores/player";
 import { exportTake } from "../../lib/tauri";
 import type { Song, Take } from "../../lib/types";
 
@@ -18,6 +18,72 @@ function PunchOverlay() {
         width: `${(punchOut - punchIn) * minPxPerSec}px`,
       }}
     />
+  );
+}
+
+// Drag handle for manually nudging the take's sync position; commits a
+// 0.1s-rounded offset on release. Uses pointer capture (not plain mouse
+// events) since this is a small element and the drag needs to keep tracking
+// even once the cursor leaves it.
+// Unclamped in both directions — dragging left of song time 0 is allowed
+// (the leading part of the take before song time 0 just isn't reachable
+// during playback; the recorded file itself is never trimmed or modified).
+function TakeSyncControls({ take }: { take: Take }) {
+  const minPxPerSec = usePlayerStore((s) => s.minPxPerSec);
+  const setTakeManualOffset = usePlayerStore((s) => s.setTakeManualOffset);
+  const dragRef = useRef<{ startX: number; startOffset: number; dragging: boolean } | null>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = { startX: e.clientX, startOffset: take.manualOffset ?? 0, dragging: false };
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (!d) return;
+    const deltaPx = e.clientX - d.startX;
+    if (!d.dragging) {
+      if (Math.abs(deltaPx) < 3) return;
+      d.dragging = true;
+      setDragging(true);
+    }
+    const newOffset = d.startOffset + deltaPx / minPxPerSec;
+    getEngine().setTakeManualOffset(newOffset);
+  };
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    setDragging(false);
+    if (!d || !d.dragging) return;
+    const deltaPx = e.clientX - d.startX;
+    const newOffset = d.startOffset + deltaPx / minPxPerSec;
+    setTakeManualOffset(take.id, newOffset);
+  };
+
+  return (
+    <div className="waveform__take-sync">
+      <button
+        type="button"
+        className={`waveform__take-drag${dragging ? " waveform__take-drag--active" : ""}`}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        title="Drag to nudge take into sync with the other tracks"
+      >
+        ⠿
+      </button>
+      <button
+        type="button"
+        className="waveform__take-reset"
+        disabled={!take.manualOffset}
+        onClick={() => setTakeManualOffset(take.id, 0)}
+        title="Reset to auto-detected position"
+      >
+        ↺
+      </button>
+    </div>
   );
 }
 
@@ -55,6 +121,7 @@ function TakeTrack({ take, song, containerRef }: TakeTrackProps) {
       <div className="stem-track__header">
         <span className="stem-track__label waveform__label--take">🎙 {label}</span>
         <div className="stem-track__controls">
+          <TakeSyncControls take={take} />
           <button
             className={`stem-track__mute${isMuted ? " stem-track__mute--on" : ""}`}
             onClick={() => toggleMute(TAKE_TRACK_KEY)}

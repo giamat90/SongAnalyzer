@@ -40,4 +40,7 @@ export interface Take {
   /** Seconds into the audio file to skip on playback (non-zero when latency
    *  compensation exceeds startPosition). */
   audioOffset?: number;
+  /** Seconds, signed; user drag nudge applied on top of startPosition to fine-tune sync
+   *  after the fact. undefined/0 means untouched (auto-detected position stands). */
+  manualOffset?: number;
 }

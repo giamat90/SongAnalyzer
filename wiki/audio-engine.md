@@ -21,9 +21,17 @@ The **first stem loaded** (vocals if present, otherwise the first in the array) 
 
 ## Take Track
 
-A recorded take loads as one extra WaveSurfer instance via `loadTakeTrack(filePath, container, startOffset, audioOffset)`. It is aligned to song time with `_takeOffset` / `_takeAudioOffset` (`fileTime = songTime - startOffset + audioOffset`, the same mapping VPS uses): the rAF tick auto-plays/pauses the take as the playhead enters/exits its window, and seeks convert between song time and file time. See [Recording Flow](recording-flow.md).
+A recorded take loads as one extra WaveSurfer instance via `loadTakeTrack(filePath, container, startOffset, audioOffset, manualOffset)`. It is aligned to song time with `_takeOffset` / `_takeAudioOffset` / `_takeManualOffset` (`fileTime = songTime - (startOffset + manualOffset) + audioOffset`, the same mapping VPS uses): the rAF tick auto-plays/pauses the take as the playhead enters/exits its window, and seeks convert between song time and file time. See [Recording Flow](recording-flow.md).
 
 **Visual alignment** (the container's `marginLeft`/`width`) is computed by `_resizeTakeTrack()` (private), called after load and again from `zoomAll`/`setScrollAll` whenever zoom or scroll changes — see [Timeline Zoom/Pan](#timeline-zoompan) below. This used to be a ratio of `container.offsetWidth` to `_duration`, which only worked because the whole song always filled the container width; now it's absolute pixels derived from `_minPxPerSec`/`_scrollTime`, which also naturally handles panning.
+
+## Manual Take Sync
+
+`_takeManualOffset` is a signed, seconds-valued field holding a post-recording user adjustment on top of `_takeOffset`, independent of `_takeAudioOffset`'s one-time auto-latency-compensation. `setTakeManualOffset(offset: number)` sets it and immediately re-runs `_resizeTakeTrack()` + `_seekTake(getCurrentTime())` — no store write. This is both the live-drag-preview mechanism (called on every `pointermove` from the drag handle in `TakeTrack.tsx`, see [Components: Take Sync Controls](components.md#take-sync-controls)) and the commit path (the player store's `setTakeManualOffset` action calls it once more with the final, `0.1s`-rounded value after persisting via `set_take_manual_offset`).
+
+This mutates real DOM/WaveSurfer state directly (`marginLeft`/`width`/seek position) rather than a canvas redraw — closer to how `zoomAll`/`setScrollAll` already work (imperative engine call, store synced separately), since the take rail's position is DOM state owned by the engine.
+
+`manualOffset` is **unclamped in both directions**, including left of song time 0 — dragging the take to start before the song does not disrupt the recorded file in any way: `_seekTake`'s existing `Math.max(0, …)` guard just means the portion of the take before song time 0 is never reachable during playback (song time never goes negative), while the file on disk is untouched. There is likewise no upper-bound clamp, consistent with a take already being allowed to run past the song's duration.
 
 ## Output Device Routing
 

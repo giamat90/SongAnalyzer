@@ -21,6 +21,10 @@ pub struct Take {
     /// compensation exceeds start_position).
     #[serde(default, skip_serializing_if = "is_zero_f64")]
     pub audio_offset: f64,
+    /// Seconds, signed; user drag nudge applied on top of start_position to fine-tune
+    /// sync after the fact. 0 means untouched.
+    #[serde(default, skip_serializing_if = "is_zero_f64")]
+    pub manual_offset: f64,
 }
 
 fn is_zero_f64(v: &f64) -> bool {
@@ -76,6 +80,19 @@ pub fn rename(song_id: &str, take_id: &str, name: &str) -> Result<Take, String> 
         .find(|t| t.id == take_id)
         .ok_or_else(|| format!("Take not found: {take_id}"))?;
     take.name = if trimmed.is_empty() { None } else { Some(trimmed.to_string()) };
+    let updated = take.clone();
+    save(song_id, &takes)?;
+    Ok(updated)
+}
+
+/// Set (or clear, with 0.0) a manual sync-drag offset on top of start_position.
+pub fn set_manual_offset(song_id: &str, take_id: &str, offset: f64) -> Result<Take, String> {
+    let mut takes = load(song_id)?;
+    let take = takes
+        .iter_mut()
+        .find(|t| t.id == take_id)
+        .ok_or_else(|| format!("Take not found: {take_id}"))?;
+    take.manual_offset = offset;
     let updated = take.clone();
     save(song_id, &takes)?;
     Ok(updated)

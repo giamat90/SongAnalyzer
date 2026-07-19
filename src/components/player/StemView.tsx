@@ -58,7 +58,7 @@ function StemView({ song }: StemViewProps) {
     const take = takes.find((t) => t.id === activeTakeId);
     if (!take || !takeRef.current) return;
     loadedTakeId.current = activeTakeId;
-    eng.loadTakeTrack(take.filepath, takeRef.current, take.startPosition, take.audioOffset ?? 0)
+    eng.loadTakeTrack(take.filepath, takeRef.current, take.startPosition, take.audioOffset ?? 0, take.manualOffset ?? 0)
       .then(() => setTakeVolume(takeVolume))
       .catch((e: unknown) => console.error("[StemView] loadTakeTrack failed:", e));
   }, [activeTakeId, takes]);
