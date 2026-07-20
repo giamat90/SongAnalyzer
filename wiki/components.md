@@ -132,7 +132,7 @@ Extra row rendered when `activeTakeId` is set. Loads the take into the engine vi
 
 ### Recording components (`src/components/recording/`)
 
-- **RecordButton** — starts/stops recording via the player store; disabled until a song is loaded.
+- **RecordButton** — starts/stops recording via the player store; disabled until a song is loaded. A separate ⏱ count-in toggle beside it cycles `countInBars` through `0 → 1 → 2 → 0`; when armed, `startRecording()` plays a flat, tempo-locked count-off (`countInBars * 4` beats at `(song.detectedBpm ?? 120) * playbackRate`, via the shared `Metronome` singleton) immediately before its existing `eng.setInteract(false); eng.seekTo(...); eng.play(); rec.start()` sequence, so `Take.startPosition` (captured earlier, unaffected) ends up beat-aligned — click stops the instant capture starts; clicking Record again during the countdown cancels it via `cancelCountIn()`. See VPS's `wiki/components.md#recordbutton` for the full design (byte-identical implementation, ported in parallel).
 - **MicSelector** — input device picker; devices get real labels only after the first `getUserMedia` grant.
 - **TakeList** — recorded takes with select/rename/delete; selecting a take mounts `TakeTrack`.
 - **RecordingOffsetControl** — click-clap latency calibration wizard writing `recordingOffsets` entries with MAD-based confidence; see [Recording Flow](recording-flow.md#latency-compensation).
