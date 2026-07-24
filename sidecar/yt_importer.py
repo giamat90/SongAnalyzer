@@ -36,6 +36,7 @@ def import_yt(url: str, output_dir: str, stems_to_extract=None, high_quality: bo
         "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "wav"}],
         "quiet": True,
         "no_warnings": True,
+        "noprogress": True,
         "progress_hooks": [ydl_hook],
     }
 
