@@ -1,4 +1,4 @@
-import { useRef, useState, type RefCallback } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent, type RefCallback } from "react";
 import { usePlayerStore, getEngine, TAKE_TRACK_KEY } from "../../stores/player";
 import { exportTake } from "../../lib/tauri";
 import type { Song, Take } from "../../lib/types";
@@ -39,6 +39,27 @@ function TakeSyncControls({ take }: { take: Take }) {
   const setTakeManualOffset = usePlayerStore((s) => s.setTakeManualOffset);
   const dragRef = useRef<{ startX: number; startOffset: number; dragging: boolean } | null>(null);
   const [dragging, setDragging] = useState(false);
+  const offsetMs = Math.round((take.manualOffset ?? 0) * 1000);
+  // Editable offset field: lets the user jump straight to a rough value (e.g.
+  // type 300 for a ~300ms drift) instead of nudging up from 0, then fine-tune
+  // with the nudge buttons/arrow keys from there. Local text state so partial
+  // input (e.g. a lone "-") doesn't get clobbered by the next store-derived
+  // render; only re-synced from the store while the field isn't focused.
+  const [offsetInput, setOffsetInput] = useState(String(offsetMs));
+  const inputFocused = useRef(false);
+
+  useEffect(() => {
+    if (!inputFocused.current) setOffsetInput(String(offsetMs));
+  }, [offsetMs]);
+
+  const commitOffsetInput = () => {
+    const parsedMs = Number(offsetInput);
+    if (Number.isFinite(parsedMs)) {
+      setTakeManualOffset(take.id, parsedMs / 1000);
+    } else {
+      setOffsetInput(String(offsetMs));
+    }
+  };
 
   const onPointerDown = (e: React.PointerEvent) => {
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -82,8 +103,6 @@ function TakeSyncControls({ take }: { take: Take }) {
     nudge(e.key === "ArrowLeft" ? -1 : 1, e.shiftKey);
   };
 
-  const offsetMs = Math.round((take.manualOffset ?? 0) * 1000);
-
   return (
     <div
       className="waveform__take-sync"
@@ -110,7 +129,34 @@ function TakeSyncControls({ take }: { take: Take }) {
       >
         ◀
       </button>
-      <span className="waveform__take-offset">{offsetMs === 0 ? "0ms" : `${offsetMs > 0 ? "+" : ""}${offsetMs}ms`}</span>
+      <input
+        type="number"
+        step={10}
+        className="waveform__take-offset"
+        value={offsetInput}
+        onChange={(e: ChangeEvent<HTMLInputElement>) => setOffsetInput(e.target.value)}
+        onFocus={(e: FocusEvent<HTMLInputElement>) => {
+          inputFocused.current = true;
+          e.target.select();
+        }}
+        onBlur={() => {
+          inputFocused.current = false;
+          commitOffsetInput();
+        }}
+        onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
+          // Stop the container's arrow-nudge handler from firing while typing —
+          // arrow keys here should move the text cursor / number step, not nudge.
+          e.stopPropagation();
+          if (e.key === "Enter") {
+            e.currentTarget.blur();
+          } else if (e.key === "Escape") {
+            setOffsetInput(String(offsetMs));
+            e.currentTarget.blur();
+          }
+        }}
+        title="Take offset in milliseconds — type a value (e.g. 300) and press Enter to jump there, then fine-tune with the nudge buttons or arrow keys"
+        aria-label="Take offset in milliseconds"
+      /><span className="waveform__take-offset-unit">ms</span>
       <button
         type="button"
         className="waveform__take-nudge"
