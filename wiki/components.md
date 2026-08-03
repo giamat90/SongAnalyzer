@@ -37,11 +37,12 @@ Manages the song list, import/upload flow, and error state.
 | Field | Type | Description |
 |-------|------|-------------|
 | `songs` | `Song[]` | All songs in the library |
+| `folders` | `Folder[]` | All folders in the library |
 | `processing` | `ProcessingStatus \| null` | Active processing job (null when idle) |
 | `isLoading` | `boolean` | Initial fetch in progress |
 | `error` | `string \| null` | Last friendly error message |
 
-Actions: `fetchSongs`, `uploadSong`, `importYoutube`, `deleteSong`, `clearError`, `initProgressListener`.
+Actions: `fetchSongs`, `uploadSong`, `importYoutube`, `deleteSong`, `fetchFolders`, `createFolder`, `renameFolder`, `deleteFolder`, `reorderFolders`, `moveSongs`, `clearError`, `initProgressListener`. Note SPS has no `renameSong` action (unlike VPS) — no backend command backs one here. See [Library Folders](#library-folders-drag-and-drop) below for the folder-related actions.
 
 Errors from `importYoutube` and `uploadSong` are parsed by `friendlyError()` into human-readable messages.
 
@@ -86,6 +87,21 @@ See [Recording Flow](recording-flow.md) for the recording state machine and late
 **All dimensions must use relative units** — `%`, `rem`, `vw`, `vh`, `fr`. Never use fixed pixel values (`px`) for layout dimensions.
 
 ## Notable Component Details
+
+### Library Folders (drag-and-drop)
+
+`LibraryPage.tsx` groups songs into user-named, flat (non-nested) folders — e.g. all songs by one band — with drag-to-reorder and drag-to-move via `@dnd-kit` (first drag-and-drop library in this project; `react-beautiful-dnd` was ruled out as archived/unmaintained). Same design as VPS's copy — `LibraryPage.tsx`/`library.ts`/`library.rs` were already structurally near-identical between the two projects going in, and this feature doesn't touch the trio-vs-dynamic-stems divergence at all.
+
+**Layout:** the folders block (`.library-page__folders`) and the root song list (`.library-page__list`) are **siblings**, not nested — folders sit pinned above the scrollable root list rather than inside it, so they stay reachable as a drop target no matter how far the root list is scrolled. `.library-page__folders` caps its own height (`max-height: 40vh; overflow-y: auto`) and scrolls independently once there are enough folders to need it. One `DndContext` wraps both regions — `DndContext` renders no wrapper DOM element, so it doesn't affect this layout split.
+
+**Components:**
+- `FolderSection` — one folder's header (drag handle, collapse toggle, inline double-click-to-rename, delete) plus its song list. `useSortable({ id: "folder:" + folder.id })` makes the folder itself draggable (reorder folders); a separately-prefixed id (`FOLDER_DRAG_PREFIX = "folder:"`) keeps folder-drag ids from colliding with song ids in dnd-kit's shared id namespace. `useDroppable({ id: folder.id })` (unprefixed) on the folder's body makes it a drop target for songs.
+- `DraggableSongRow` — wraps `SongCard` with a small drag-handle button (⠿) that receives dnd-kit's `attributes`/`listeners`; the card itself keeps its existing click-to-open/delete handlers untouched.
+- `RootDropZone` — `useDroppable({ id: "root" })` wrapping the un-foldered song list.
+
+**Collision detection:** `DndContext` uses a custom `pointerWithin` → `rectIntersection` fallback strategy, not dnd-kit's default `closestCenter`. `closestCenter` compares rect *centers*, so a short/empty folder next to the tall root song list frequently lost to a nearby list row even with the pointer squarely over the folder — the drop silently resolved to the wrong container (or nothing). Resolving by what's actually under the pointer fixed it; `rectIntersection` is only a fallback for the rare case nothing is directly under the pointer. Both `FolderSection`'s body and `RootDropZone` also read `isOver` from their `useDroppable` call to apply a `--over` highlight class (outline + tint) while a valid drop is armed.
+
+**Drop logic (`handleDragEnd` in `LibraryPage`):** a single store action, `moveSongs(folderId, orderedSongIds)`, covers both a same-folder reorder and a cross-folder move-at-position. Folder-drag (`activeId` starts with `folder:`) is handled separately via `reorderFolders(orderedIds)`.
 
 ### StemView
 

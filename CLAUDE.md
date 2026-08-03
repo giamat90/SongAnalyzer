@@ -64,9 +64,17 @@ interface Song {
   processedAt: string;
   directory: string;
   stems: StemName[];   // e.g. ["vocals","drums","bass","guitar","piano","other"]
+  folderId?: string | null; // library folder this song belongs to; null/absent = root
+  sortIndex: number;        // rank among sibling songs sharing the same folderId
+}
+
+interface Folder {           // flat, user-named grouping of songs (e.g. all songs by one band)
+  id: string;
+  name: string;
+  sortIndex: number;
 }
 ```
-Persisted in `~/.songpracticestudio/library.json`; stem WAVs in `~/.songpracticestudio/library/{song_id}/` (managed by `src-tauri/src/storage.rs` + `library.rs`).
+Persisted in `~/.songpracticestudio/library.json` (top-level shape `{ folders: Folder[], songs: Song[] }`, with a legacy-raw-array fallback on read — see `wiki/data-model.md#storage-layout`); stem WAVs in `~/.songpracticestudio/library/{song_id}/` (managed by `src-tauri/src/storage.rs` + `library.rs`). Folder drag-and-drop (create/rename/delete/reorder folders, drag songs to reorder/move) lives in `LibraryPage.tsx` via `@dnd-kit` — see `wiki/components.md#library-folders-drag-and-drop`.
 
 ### Take data model
 ```typescript
@@ -133,8 +141,8 @@ SongPracticeStudio/
 │   │   └── AnalyzerPage.tsx   ← Header + StemView + transport/tempo footer
 │   └── App.tsx                ← Two-page router: library ↔ analyzer
 └── src-tauri/src/
-    ├── commands.rs   ← process_song, import_youtube, export_stem, export_all, export_take, export_mix, save_take, list_takes, delete_take, rename_take, list_songs, delete_song, set_metronome_offset
-    ├── library.rs    ← Song struct (includes stems: Vec<String>), library.json CRUD
+    ├── commands.rs   ← process_song, import_youtube, export_stem, export_all, export_take, export_mix, save_take, list_takes, delete_take, rename_take, list_songs, delete_song, set_metronome_offset, list_folders, create_folder, rename_folder, delete_folder, reorder_folders, move_songs
+    ├── library.rs    ← Song struct (includes stems: Vec<String>, folderId, sortIndex), Folder struct, library.json CRUD
     └── lib.rs        ← Tauri builder, invoke_handler registration
 ```
 
