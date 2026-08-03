@@ -133,6 +133,8 @@ pub async fn process_song(
                     stems,
                     metronome_offset: None,
                     has_chords,
+                    folder_id: None,
+                    sort_index: 0,
                 };
 
                 library::add(song.clone())?;
@@ -162,7 +164,7 @@ pub async fn process_song(
 
 #[tauri::command]
 pub async fn list_songs() -> Result<Vec<Song>, String> {
-    library::load()
+    library::load_songs()
 }
 
 #[tauri::command]
@@ -173,6 +175,41 @@ pub async fn delete_song(song_id: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn set_metronome_offset(song_id: String, offset: Option<f64>) -> Result<Song, String> {
     library::update_metronome_offset(&song_id, offset)
+}
+
+// --- Folder commands ---
+
+#[tauri::command]
+pub async fn list_folders() -> Result<Vec<library::Folder>, String> {
+    library::load_folders()
+}
+
+#[tauri::command]
+pub async fn create_folder(name: String) -> Result<library::Folder, String> {
+    library::create_folder(&name)
+}
+
+#[tauri::command]
+pub async fn rename_folder(folder_id: String, name: String) -> Result<library::Folder, String> {
+    library::rename_folder(&folder_id, &name)
+}
+
+#[tauri::command]
+pub async fn delete_folder(folder_id: String) -> Result<(), String> {
+    library::delete_folder(&folder_id)
+}
+
+#[tauri::command]
+pub async fn reorder_folders(ordered_ids: Vec<String>) -> Result<Vec<library::Folder>, String> {
+    library::reorder_folders(&ordered_ids)
+}
+
+#[tauri::command]
+pub async fn move_songs(
+    folder_id: Option<String>,
+    ordered_song_ids: Vec<String>,
+) -> Result<Vec<Song>, String> {
+    library::move_songs(folder_id, &ordered_song_ids)
 }
 
 #[tauri::command]
@@ -267,6 +304,8 @@ pub async fn import_youtube(
                     stems,
                     metronome_offset: None,
                     has_chords,
+                    folder_id: None,
+                    sort_index: 0,
                 };
 
                 library::add(song.clone())?;

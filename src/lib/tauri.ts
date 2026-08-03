@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { ChordSegment, ProcessingStatus, Song, StemName, Take } from "./types";
+import type { ChordSegment, Folder, ProcessingStatus, Song, StemName, Take } from "./types";
 
 /** Process a song file through the Python sidecar */
 export async function processSong(filePath: string, stemsToExtract?: StemName[], highQuality?: boolean): Promise<Song> {
@@ -25,6 +25,36 @@ export async function importYoutube(url: string, stemsToExtract?: StemName[], hi
 /** Read detected chord segments for a processed song */
 export async function readSongChords(songId: string): Promise<ChordSegment[]> {
   return invoke<ChordSegment[]>("read_song_chords", { songId });
+}
+
+/** List all folders in the library */
+export async function listFolders(): Promise<Folder[]> {
+  return invoke<Folder[]>("list_folders");
+}
+
+/** Create a new (flat) folder. Empty/whitespace name is rejected. */
+export async function createFolder(name: string): Promise<Folder> {
+  return invoke<Folder>("create_folder", { name });
+}
+
+/** Rename a folder. Empty/whitespace name is rejected. */
+export async function renameFolder(folderId: string, name: string): Promise<Folder> {
+  return invoke<Folder>("rename_folder", { folderId, name });
+}
+
+/** Delete a folder; its songs move back to the root list, they are not deleted. */
+export async function deleteFolder(folderId: string): Promise<void> {
+  return invoke("delete_folder", { folderId });
+}
+
+/** Reorder folders (drag-to-reorder the folder sections themselves) */
+export async function reorderFolders(orderedIds: string[]): Promise<Folder[]> {
+  return invoke<Folder[]>("reorder_folders", { orderedIds });
+}
+
+/** Move/reorder songs into `folderId` (null = root) in the given order. Covers both a same-folder reorder and a cross-folder drag-drop-at-position. */
+export async function moveSongs(folderId: string | null, orderedSongIds: string[]): Promise<Song[]> {
+  return invoke<Song[]>("move_songs", { folderId, orderedSongIds });
 }
 
 /** Open a native Save As dialog and copy a stem WAV to user-chosen location */

@@ -1,15 +1,22 @@
 import { create } from "zustand";
-import type { ProcessingStatus, Song, StemName } from "../lib/types";
+import type { Folder, ProcessingStatus, Song, StemName } from "../lib/types";
 import {
+  createFolder as createFolderApi,
+  deleteFolder as deleteFolderApi,
   deleteSong as apiDeleteSong,
   importYoutube as importYoutubeApi,
+  listFolders,
   listSongs,
+  moveSongs as moveSongsApi,
   onProcessingProgress,
   processSong,
+  renameFolder as renameFolderApi,
+  reorderFolders as reorderFoldersApi,
 } from "../lib/tauri";
 
 interface LibraryState {
   songs: Song[];
+  folders: Folder[];
   processing: ProcessingStatus | null;
   isLoading: boolean;
   error: string | null;
@@ -18,6 +25,12 @@ interface LibraryState {
   uploadSong: (filePath: string, stems?: StemName[], highQuality?: boolean) => Promise<void>;
   importYoutube: (url: string, stems?: StemName[], highQuality?: boolean) => Promise<void>;
   deleteSong: (songId: string) => Promise<void>;
+  fetchFolders: () => Promise<void>;
+  createFolder: (name: string) => Promise<void>;
+  renameFolder: (folderId: string, name: string) => Promise<void>;
+  deleteFolder: (folderId: string) => Promise<void>;
+  reorderFolders: (orderedIds: string[]) => Promise<void>;
+  moveSongs: (folderId: string | null, orderedSongIds: string[]) => Promise<void>;
   clearError: () => void;
   initProgressListener: () => Promise<() => void>;
 }
@@ -63,6 +76,7 @@ function friendlyError(raw: unknown, context: "youtube" | "upload"): string {
 
 export const useLibraryStore = create<LibraryState>((set) => ({
   songs: [],
+  folders: [],
   processing: null,
   isLoading: false,
   error: null,
@@ -114,6 +128,70 @@ export const useLibraryStore = create<LibraryState>((set) => ({
       }));
     } catch (e) {
       console.error("Failed to delete song:", e);
+    }
+  },
+
+  fetchFolders: async () => {
+    try {
+      const folders = await listFolders();
+      set({ folders });
+    } catch (e) {
+      console.error("Failed to fetch folders:", e);
+    }
+  },
+
+  createFolder: async (name: string) => {
+    try {
+      const folder = await createFolderApi(name);
+      set((state) => ({ folders: [...state.folders, folder] }));
+    } catch (e) {
+      console.error("Failed to create folder:", e);
+      set({ error: String(e) });
+    }
+  },
+
+  renameFolder: async (folderId: string, name: string) => {
+    try {
+      const updated = await renameFolderApi(folderId, name);
+      set((state) => ({
+        folders: state.folders.map((f) => (f.id === folderId ? updated : f)),
+      }));
+    } catch (e) {
+      console.error("Failed to rename folder:", e);
+      set({ error: String(e) });
+    }
+  },
+
+  deleteFolder: async (folderId: string) => {
+    try {
+      await deleteFolderApi(folderId);
+      set((state) => ({
+        folders: state.folders.filter((f) => f.id !== folderId),
+        songs: state.songs.map((s) => (s.folderId === folderId ? { ...s, folderId: null } : s)),
+      }));
+    } catch (e) {
+      console.error("Failed to delete folder:", e);
+    }
+  },
+
+  reorderFolders: async (orderedIds: string[]) => {
+    try {
+      const folders = await reorderFoldersApi(orderedIds);
+      set({ folders });
+    } catch (e) {
+      console.error("Failed to reorder folders:", e);
+    }
+  },
+
+  moveSongs: async (folderId: string | null, orderedSongIds: string[]) => {
+    try {
+      const updated = await moveSongsApi(folderId, orderedSongIds);
+      set((state) => ({
+        songs: state.songs.map((s) => updated.find((u) => u.id === s.id) ?? s),
+      }));
+    } catch (e) {
+      console.error("Failed to move/reorder songs:", e);
+      set({ error: String(e) });
     }
   },
 

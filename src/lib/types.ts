@@ -11,6 +11,15 @@ export interface Song {
   stems: StemName[];
   metronomeOffset?: number;
   hasChords?: boolean;
+  folderId?: string | null;
+  sortIndex: number;
+}
+
+/** User-named, flat (non-nested) grouping of songs in the library */
+export interface Folder {
+  id: string;
+  name: string;
+  sortIndex: number;
 }
 
 export interface ChordSegment {
