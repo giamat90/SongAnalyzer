@@ -1,4 +1,4 @@
-# Vocal Practice Studio (VPS)
+# Song Practice Studio (SPS)
 
 A Tauri v2 desktop app for singers to practice vocals with AI-powered analysis and feedback.
 
@@ -41,7 +41,7 @@ A Tauri v2 desktop app for singers to practice vocals with AI-powered analysis a
 ## Project Structure
 
 ```
-VPS/
+SPS/
 ├── src/                          # React frontend
 │   ├── pages/                    # LibraryPage, PracticeRoom
 │   ├── components/
