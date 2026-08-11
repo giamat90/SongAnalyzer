@@ -46,12 +46,14 @@ Timeline zoom/pan state: `minPxPerSec` (zoom level, WaveSurfer's own px-per-seco
 `metronomeOffset` (song time (s) where the metronome's beat 1 lands, persisted per song via `set_metronome_offset`) — drag the downbeat marker on the TimeRuler, or "Set" to the current playhead, in `TempoControl`; see `wiki/components.md#tempocontrol`.
 
 ### Processing pipeline (`sidecar/processor.py`)
-Three stages:
-1. Demucs separation → writes `{name}.wav` for each of the 6 stems (progress 0→0.78)
-2. BPM detection via `librosa.beat.tempo` on the original file (0.78→0.90)
-3. Key detection via chromagram + Krumhansl-Kessler profiles (0.90→1.0) — **no pitch extraction**, uses `chroma_cqt` on the first 60 seconds
+Five stages:
+1. Demucs separation → writes `{name}.wav` for each requested stem, model chosen by a stem-count cascade (no guitar/piano → single `htdemucs`(`_ft`) pass; guitar or piano requested → `htdemucs`(`_ft`) on the full mix then `htdemucs_6s` on the resulting "other" stem) (progress 0→0.86)
+2. BPM detection via `librosa.beat.tempo` on the original file — **no pitch extraction** (0.86)
+3. Key detection via `chroma_cqt` on the first 60 seconds + Krumhansl-Kessler profiles (0.86→0.92)
+4. Chord detection — chroma-template matching (24 major/minor triads, 1s hops) over the whole song → `chords.json`, non-fatal on failure (0.92→0.96)
+5. Bass tab transcription — only if a `bass` stem was extracted → `bass_tab.json`, non-fatal on failure (0.96→1.0). **Backend-only**: no Rust command or frontend component reads it back yet on `master` (unlike chords — see below); a viewer exists only on the unmerged `feat/bass-tab` branch.
 
-Returns `{ stems: {name: path}, duration, detectedBpm, detectedKey }`.
+Returns `{ stems: {name: path}, duration, detectedBpm, detectedKey, chords, bassTab }` — `chords`/`bassTab` are booleans (file written or not); actual chord data is fetched separately via `read_song_chords(songId)` once `Song.hasChords` is true.
 
 ### Song data model
 ```typescript
@@ -64,6 +66,7 @@ interface Song {
   processedAt: string;
   directory: string;
   stems: StemName[];   // e.g. ["vocals","drums","bass","guitar","piano","other"]
+  hasChords?: boolean; // true if chords.json was written — see read_song_chords
   folderId?: string | null; // library folder this song belongs to; null/absent = root
   sortIndex: number;        // rank among sibling songs sharing the same folderId
 }
@@ -97,10 +100,13 @@ Persisted in `takes.json` inside the song directory; audio in `takes/{takeId}.wa
 ```
 SongPracticeStudio/
 ├── sidecar/
-│   ├── processor.py      ← Demucs 6s + BPM + key; main pipeline
+│   ├── processor.py      ← Demucs 6s + BPM + key + chords + bass tab; main pipeline
 │   ├── yt_importer.py    ← yt-dlp download → processor.process()
 │   ├── main.py           ← JSON-lines command dispatcher (process, import_yt, convert_take, normalize_take, mix_export, ping, quit)
 │   ├── recording.py      ← take WAV conversion (convert_take_to_wav), RMS loudness normalization (normalize_take), mixdown rendering (mix_export)
+│   ├── fetch_models.py   ← vendors htdemucs weights into the frozen build at build time
+│   ├── version_check.py  ← proactive + reactive yt-dlp staleness checks (see MPS/wiki/known-issues.md)
+│   ├── smoke_test.py     ← standalone sanity script, not part of the main.py dispatch loop
 │   └── requirements.txt
 ├── src/
 │   ├── audio/
@@ -111,15 +117,19 @@ SongPracticeStudio/
 │   │   ├── player.ts           ← Zustand: stemVolumes/mute/solo, punch region, transport, recording, latency calibration
 │   │   ├── library.ts          ← Zustand: song list, upload/import, progress
 │   │   └── updater.ts          ← Zustand: auto-update state (tauri-plugin-updater)
-│   ├── lib/types.ts            ← Song, StemName, Take, ProcessingStatus
+│   ├── lib/types.ts            ← Song, StemName, Take, ChordSegment, ProcessingStatus
 │   ├── lib/tauri.ts            ← IPC wrappers: processSong, listSongs, saveTake, exportStem, exportMix, …
 │   ├── lib/zoomPan.ts          ← pure zoom-to-cursor / pan math for timeline ctrl+wheel/shift+wheel (byte-identical to VPS)
 │   ├── lib/metronomeSync.ts    ← pure phase-lock math for the metronome downbeat anchor (byte-identical to VPS)
+│   ├── lib/chords.ts           ← useChordSegments hook + formatChordName/findActiveChordIndex helpers
 │   ├── components/
 │   │   ├── player/
 │   │   │   ├── StemView.tsx       ← TimeRuler + all StemTracks + TakeTrack
 │   │   │   ├── ExportMixButton.tsx ← export current mix as WAV (rendered in AnalyzerPage header)
 │   │   │   ├── DownloadAllButton.tsx ← zip export of all stems + takes (rendered in AnalyzerPage header)
+│   │   │   ├── LoopButton.tsx     ← punch-loop toggle
+│   │   │   ├── ChordCarousel.tsx  ← "now/past/next" chord display (AnalyzerPage topbar)
+│   │   │   ├── ChordRow.tsx       ← chord segments as timeline chips (inside StemView)
 │   │   │   ├── StemTrack.tsx      ← Single stem row: waveform + mute/solo/volume + download button
 │   │   │   ├── TakeTrack.tsx      ← Recorded take row, aligned at its startPosition
 │   │   │   ├── TimeRuler.tsx      ← Canvas ruler with drag-to-create punch region
@@ -135,14 +145,18 @@ SongPracticeStudio/
 │   │   │   └── UpdateDialog.tsx   ← Auto-update modal
 │   │   └── upload/
 │   │       ├── DropZone.tsx       ← File drag-and-drop → processSong
-│   │       └── YouTubeImport.tsx  ← URL paste → importYoutube
+│   │       ├── YouTubeImport.tsx  ← URL paste → importYoutube
+│   │       └── StemPicker.tsx     ← per-stem extraction toggle + high-quality checkbox, shared by both import paths
 │   ├── pages/
 │   │   ├── LibraryPage.tsx    ← Song list + import + About modal; SongCard shows stem count
 │   │   └── AnalyzerPage.tsx   ← Header + StemView + transport/tempo footer
 │   └── App.tsx                ← Two-page router: library ↔ analyzer
 └── src-tauri/src/
-    ├── commands.rs   ← process_song, import_youtube, export_stem, export_all, export_take, export_mix, save_take, list_takes, delete_take, rename_take, list_songs, delete_song, set_metronome_offset, list_folders, create_folder, rename_folder, delete_folder, reorder_folders, move_songs
-    ├── library.rs    ← Song struct (includes stems: Vec<String>, folderId, sortIndex), Folder struct, library.json CRUD
+    ├── commands.rs   ← process_song, import_youtube, read_song_chords, export_stem, export_all, export_take, export_mix, save_take, list_takes, delete_take, rename_take, set_take_manual_offset, list_songs, delete_song, set_metronome_offset, list_folders, create_folder, rename_folder, delete_folder, reorder_folders, move_songs
+    ├── library.rs    ← Song struct (includes stems: Vec<String>, hasChords, folderId, sortIndex), Folder/ChordSegment structs, library.json CRUD, read_chords()
+    ├── takes.rs      ← Take struct + takes.json CRUD (per song)
+    ├── sidecar.rs     ← SidecarManager, JSON-lines IPC
+    ├── storage.rs     ← ~/.songpracticestudio/ path helpers
     └── lib.rs        ← Tauri builder, invoke_handler registration
 ```
 
@@ -241,3 +255,4 @@ If any of these are needed, refer to `C:\Workspace\GiaMat90\MPS\VPS` for the imp
 
 - The `guitar` icon in `StemTrack.tsx` reuses 🎸 for both guitar and bass; could differentiate
 - No waveform error UI per stem (only a top-level `stem-view__error` div)
+- Bass tab transcription runs on every `process` call (`sidecar/processor.py`) and writes `bass_tab.json`, but no Rust command or frontend component reads it back — a viewer exists only on the unmerged `feat/bass-tab` branch (`ee54b89`)

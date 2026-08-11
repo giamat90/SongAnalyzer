@@ -8,21 +8,27 @@
 App
 ├── LibraryPage
 │   ├── DropZone           — drag-and-drop audio file import
+│   │   └── StemPicker     — pick which of the 6 stems to extract + high-quality toggle
 │   ├── YouTubeImport      — paste-and-import YouTube URL
 │   ├── SongCard           — song list item with stem count + delete
 │   └── About modal        — version/info dialog
 ├── AnalyzerPage
+│   ├── header
+│   │   ├── DownloadAllButton  — zip export of every stem + every take
+│   │   └── ExportMixButton    — render the audible mix (mute/solo/volume/punch) to WAV
 │   ├── topbar (fixed)
 │   │   ├── TransportControls  — play/pause/stop + current time display
+│   │   ├── LoopButton         — punch-loop toggle
 │   │   ├── TempoControl       — BPM-first speed control
 │   │   ├── MicSelector        — microphone input picker
 │   │   ├── OutputSelector     — audio output device picker (ported from VPS)
-│   │   └── RecordButton       — start/stop recording
+│   │   ├── RecordButton       — start/stop recording
+│   │   └── ChordCarousel      — gauge-dial-style "now/past/next" chord display
 │   ├── StemView            — orchestrates TimeRuler + all StemTracks + TakeTrack; loads AudioEngine
 │   │   ├── TimeRuler       — canvas time ruler with drag-to-select punch/loop region
+│   │   ├── ChordRow        — chord segments as timeline chips, synced to zoom/scroll
 │   │   ├── StemTrack (×N)  — one row per stem: waveform + mute/solo + volume + download button
-│   │   ├── TakeTrack       — recorded take row, aligned at its startPosition
-│   │   └── ExportMixButton — render the audible mix (mute/solo/volume/punch) to WAV
+│   │   └── TakeTrack       — recorded take row, aligned at its startPosition
 │   └── TakeList            — take list with select/rename/delete
 │       └── RecordingOffsetControl — per-device latency calibration wizard
 └── UpdateDialog            — auto-update modal (tauri-plugin-updater)
@@ -195,7 +201,20 @@ A "↺" reset-to-0 button appears next to Set once the offset is nonzero.
 
 ### DropZone
 
-Drag-and-drop target. Accepts audio files and calls `uploadSong(filePath)` on the library store. Disabled while any processing job is active.
+Drag-and-drop target. Accepts audio files and calls `uploadSong(filePath)` on the library store. Disabled while any processing job is active. Renders `StemPicker` above the drop target so stem selection applies to the next upload or YouTube import alike.
+
+### StemPicker
+
+Controlled component (`value`/`onChange` + `highQuality`/`onHighQualityChange`) rendered in `LibraryPage` above `DropZone`/`YouTubeImport`, shared by both import paths. A chip toggle per stem (`vocals`/`drums`/`bass`/`guitar`/`piano`/`other`, colored via the same `STEM_COLORS` map `engine.ts` uses for waveforms) — at least one stem must stay selected, toggling the last one off is a no-op. Below it, a "High quality" checkbox toggles `htdemucs_ft` vs. `htdemucs` (hint text states the tradeoff: "better isolation, ~2–3× slower" vs. "fast standard quality"). Selected stems + the flag are passed straight through as `stemsToExtract`/`highQuality` on `processSong`/`importYoutube` — see [Data Model](data-model.md) and `processor.py`'s stem-count-driven model cascade (no guitar/piano → single `htdemucs(_ft)` pass; guitar or piano requested → cascade: `htdemucs(_ft)` on the full mix, then `htdemucs_6s` on the resulting "other" stem).
+
+### ChordCarousel / ChordRow
+
+Both read from `useChordSegments(song)` (`src/lib/chords.ts`), which lazily fetches `read_song_chords(song.id)` the first time a song with `hasChords: true` is displayed (empty array, no fetch, if `hasChords` is false — songs processed before chord detection shipped, or where it failed non-fatally in `processor.py`). Chords are detected once at processing time (chroma-template matching, `processor.py`'s `_detect_chords_chroma()`), written to `chords.json`, and never recomputed — no live/on-the-fly detection.
+
+- **ChordCarousel** (`AnalyzerPage`'s topbar) — a gauge-dial-style strip: the currently-playing chord centered ("now"), with up to 2 past and 2 next chords on either side, each positioned by `--dist`/`--dist-abs` CSS custom properties. Returns `null` entirely if `!song.hasChords || segments.length === 0`, so it takes no layout space on a song with no chord data.
+- **ChordRow** (inside `StemView`, above the stem tracks) — the same segments laid out as fixed-position chips along the actual timeline, sized/positioned in pixels from `minPxPerSec`/`scrollTime` like everything else in the zoom/pan system. Chips narrower than `MIN_LABEL_PX` (28px) show as an unlabeled tick instead of a clipped label, unless active.
+
+Both share `formatChordName()` (`"C:maj"` → `"C"`, `"A:min"` → `"Am"`) and `findActiveChordIndex()`/`findNearestChordIndex()` (binary search over the sorted segments) from `lib/chords.ts`.
 
 ### YouTubeImport
 

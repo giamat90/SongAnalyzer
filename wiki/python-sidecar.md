@@ -56,20 +56,22 @@ Rust sends one command at a time (the sidecar processes synchronously):
 
 ### `process`
 
-Separates a mixed audio file and extracts BPM and key.
+Separates a mixed audio file and extracts BPM, key, chords, and (if a bass stem exists) a bass tab transcription.
 
 ```json
 {"cmd": "process", "filePath": "/path/to/song.mp3", "outputDir": "/path/to/output/", "stemsToExtract": ["vocals", "drums"], "highQuality": false}
 ```
 
-`stemsToExtract` (optional) — subset of stems to write; drives smart model selection. `highQuality` (optional, default `false`) — cascaded high-quality separation mode.
+`stemsToExtract` (optional) — subset of stems to write; drives smart model selection: no guitar/piano requested → a single `htdemucs`(`_ft`) pass; guitar or piano requested → cascade, `htdemucs`(`_ft`) on the full mix followed by `htdemucs_6s` on the resulting "other" stem. `highQuality` (optional, default `false`) — use `htdemucs_ft` instead of `htdemucs` for the first pass.
 
 Steps (`processor.py`):
-1. Demucs `htdemucs_6s` → writes `vocals.wav`, `drums.wav`, `bass.wav`, `guitar.wav`, `piano.wav`, `other.wav` (progress 0→0.78)
-2. BPM detection via `librosa.beat.tempo` on the original file (0.78→0.90)
-3. Key detection via `chroma_cqt` on the first 60 seconds + Krumhansl-Kessler profiles (0.90→1.0)
+1. Demucs (model per the cascade above) → writes each requested stem's WAV (progress 0→0.86)
+2. BPM detection via `librosa.beat.tempo` on the original file (0.86)
+3. Key detection via `chroma_cqt` on the first 60 seconds + Krumhansl-Kessler profiles (0.86→0.92)
+4. Chord detection — windowed chroma → 24 major/minor chord-template matching (1s hops) over the whole song, writes `chords.json`; non-fatal on failure (0.92→0.96)
+5. Bass tab transcription — only if a `bass` stem was extracted; writes `bass_tab.json`; non-fatal on failure (0.96→1.0). **Backend-only as of this writing** — nothing in `commands.rs`/`library.rs` reads `bass_tab.json` back or persists a flag for it (unlike chords, which get `has_chords` on `Song` + the `read_song_chords` command), and no frontend component consumes it on `master`; a viewer exists only on the unmerged `feat/bass-tab` branch.
 
-Returns `{ stems: {name: path}, duration, detectedBpm, detectedKey }`.
+Returns `{ stems: {name: path}, duration, detectedBpm, detectedKey, chords, bassTab }` — the last two are booleans (whether each JSON file was successfully written), not the data itself; chords are fetched separately via `read_song_chords` once `Song.hasChords` is true.
 
 ### `import_yt`
 
