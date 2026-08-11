@@ -1,14 +1,18 @@
 # Song Practice Studio (SPS)
 
-A Tauri v2 desktop app for singers to practice vocals with AI-powered analysis and feedback.
+A Tauri v2 desktop app that splits any song into instrument stems and turns it into a practice player. Drop an audio file or paste a YouTube URL, pick which of the 6 stems to extract (or take all of them), then listen back with per-stem mute/solo/volume, a loop/punch region, speed control with a phase-lockable metronome, chord labels synced to playback, and timeline zoom/pan. Record yourself over the mix with latency-compensated takes, export a mixdown of whatever's currently audible, or download everything — every stem plus every take — as one zip.
+
+Forked from [**VPS**](../VPS) (Vocal Practice Studio), a vocal practice app with pitch/vibrato analysis and coaching. This fork traded that analysis stack for full-band multi-stem separation; recording was later reimplemented here independently for the multi-stem context. See `CLAUDE.md` for the full architecture writeup and `MPS/wiki/feature-parity.md` for exactly what's shared vs. diverged between the two.
 
 ## Architecture
 
-- **Frontend**: React 19 + TypeScript + Vite + WaveSurfer.js
-- **Desktop Shell**: Tauri v2 (Rust)
-- **Backend**: Python sidecar (JSON-lines protocol)
-- **State**: Zustand stores
-- **Audio**: Web Audio API + librosa (onset detection) + torchcrepe (pitch extraction) + demucs (stem separation)
+- **Frontend**: React 19 + TypeScript (strict) + Vite + Zustand + WaveSurfer.js (one instance per stem)
+- **Desktop shell**: Tauri v2 (Rust)
+- **Backend**: Python sidecar, JSON-lines over stdin/stdout, spawned lazily on first use
+- **Stem separation**: Demucs `htdemucs_6s` (6 stems: vocals, drums, bass, guitar, piano, other), with a cascaded high-quality mode
+- **Chord detection**: chroma-template matching (major/minor triads) over the whole song, windowed at 1 s hops
+- **BPM / key detection**: `librosa.beat.tempo` / chromagram + Krumhansl-Kessler profiles
+- **Bass tab transcription**: the sidecar transcribes the bass stem to `bass_tab.json` during processing, but nothing in the Rust layer or UI reads it back yet on `master` — a scrolling-canvas viewer exists only on the unmerged `feat/bass-tab` branch
 
 ## Setup
 
@@ -22,9 +26,8 @@ A Tauri v2 desktop app for singers to practice vocals with AI-powered analysis a
 
 1. **Activate dev environment:**
    ```bash
-   dev.bat   # Windows
+   dev.bat   # Windows — puts cargo, node, and the Python venv on PATH
    ```
-   This sets up PATH, venv, and Python env vars.
 
 2. **Install dependencies:**
    ```bash
@@ -37,78 +40,62 @@ A Tauri v2 desktop app for singers to practice vocals with AI-powered analysis a
    ```bash
    npm run tauri dev
    ```
+   The sidecar is **not** auto-started by this — it's spawned lazily on the first song processed or YouTube import.
 
 ## Project Structure
 
 ```
 SPS/
 ├── src/                          # React frontend
-│   ├── pages/                    # LibraryPage, PracticeRoom
+│   ├── pages/                    # LibraryPage, AnalyzerPage
 │   ├── components/
-│   │   ├── analysis/             # PianoRoll, DualTuner, VibratoCard, etc.
-│   │   ├── player/               # Waveform, TransportControls, etc.
-│   │   ├── recording/            # RecordButton, TakeList, ABToggle
-│   │   ├── upload/               # DropZone
-│   │   └── coaching/             # CoachPanel
-│   ├── stores/                   # Zustand: library, player, analysis
-│   ├── audio/                    # AudioEngine, VocalRecorder, PitchDetector, analysisUtils
-│   ├── lib/                      # tauri.ts, types.ts, constants.ts
-│   └── styles/                   # global.css
-├── src-tauri/                    # Tauri shell & Rust backend
+│   │   ├── player/                # StemView, StemTrack, TakeTrack, TempoControl,
+│   │   │                          # TimeRuler, TransportControls, ChordCarousel/ChordRow, …
+│   │   ├── recording/             # RecordButton, MicSelector, RecordingOffsetControl, TakeList
+│   │   ├── upload/                # DropZone, YouTubeImport, StemPicker (stem selection + high-quality toggle)
+│   │   └── updater/               # UpdateDialog
+│   ├── stores/                   # Zustand: library, player, updater
+│   ├── audio/                    # AudioEngine (dynamic stems Map + take), VocalRecorder, Metronome
+│   └── lib/                      # tauri.ts, types.ts, chords.ts, zoomPan.ts, metronomeSync.ts
+├── src-tauri/                     # Tauri shell & Rust backend
 │   └── src/
-│       ├── commands.rs           # process_song, save_take, load_analysis, etc.
-│       ├── lib.rs               # Command registration, state
-│       ├── sidecar.rs           # SidecarManager, JSON-lines IPC
-│       ├── library.rs           # Song persistence
-│       └── storage.rs           # App data dir management
-├── sidecar/                      # Python backend
-│   ├── main.py                  # Command router (threaded worker)
-│   ├── processor.py             # Song processing pipeline
-│   ├── analysis.py              # Take analysis (pitch, onset, dynamics, vibrato)
+│       ├── commands.rs            # process_song, import_youtube, save_take, export_mix, export_all, …
+│       ├── library.rs             # Song/Folder persistence (library.json)
+│       ├── takes.rs                # Take persistence (takes.json per song)
+│       ├── sidecar.rs              # SidecarManager, JSON-lines IPC
+│       └── storage.rs              # ~/.songpracticestudio/ path helpers
+├── sidecar/                       # Python backend
+│   ├── main.py                    # JSON-lines command dispatcher
+│   ├── processor.py               # Demucs separation + BPM + key + chord detection
+│   ├── recording.py               # take WAV conversion, RMS loudness normalization, mixdown rendering
+│   ├── yt_importer.py             # yt-dlp download → processor.process()
 │   └── requirements.txt
-├── dev.bat                       # Dev environment setup
-├── package.json                  # Node dependencies
-├── tsconfig.json                # TypeScript config
-├── vite.config.ts               # Vite + Tauri config
-├── index.html                   # App root
-└── README.md
+├── dev.bat                        # Dev environment setup
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+├── index.html
+└── wiki/                          # Authoritative docs — architecture, components, data model, recording flow
 ```
 
 ## Features
 
-### Phase 1 (Complete)
-- Library: upload & manage songs
-- Stem separation (Demucs)
-- Practice room: dual waveforms, playback controls
-- Recording: capture vocal takes
-- A/B comparison: original vs. take
-
-### Phase 2 (Complete)
-- **Analysis visualizations:**
-  - Piano roll: pitch contour overlay
-  - Dynamics curve: RMS comparison
-  - Vibrato metrics: rate/depth/evenness
-  - Timing chart: onset deviation scatter
-  - Dual tuner: real-time pitch needle
-- **Coaching tips:** rule-based feedback on pitch, timing, vibrato, dynamics
+- **Library**: upload or YouTube-import songs, organize into drag-and-drop folders, auto-update
+- **Stem separation**: pick any subset of vocals/drums/bass/guitar/piano/other before processing; standard (`htdemucs_6s`) or high-quality cascaded mode
+- **Player**: per-stem waveform with mute/solo/volume, loop/punch region, ctrl+wheel zoom / shift+wheel pan over the timeline
+- **Speed & metronome**: BPM-first speed control, click track phase-locked to a draggable downbeat marker
+- **Chords**: chord labels detected per song, scrolled in sync with playback
+- **Recording**: mic capture over the mix with per-device latency calibration (click-clap wizard), auto-stop at punch-out/song end, RMS loudness normalization against `vocals.wav`, manual take-sync nudging (drag or arrow keys)
+- **Export**: mixdown of the live mix (honors mute/solo/volume/punch region), any stem or take individually, or everything as one zip
 
 ## Development
-
-### Key Technologies
-
-- **Demucs v4.0.1**: Stem separation (htdemucs model)
-- **torchcrepe**: Pitch extraction (CREPE algorithm)
-- **librosa**: Onset detection, RMS dynamics, BPM, key detection
-- **WaveSurfer.js v7**: Dual waveform visualization
-- **Web Audio API**: Real-time autocorrelation pitch detector
-- **MediaRecorder**: Vocal take recording (WebM/Opus)
 
 ### Sidecar Protocol
 
 Commands sent via stdin (JSON lines):
 ```json
-{"cmd": "process", "filePath": "/path/to/song.mp3"}
-{"cmd": "analyze", "recordingPath": "/path/to/take.webm", "outputDir": "/path/to/song/dir"}
+{"cmd": "process", "filePath": "/path/to/song.mp3", "stemsToExtract": ["vocals","drums"], "highQuality": false}
+{"cmd": "import_yt", "url": "https://youtube.com/watch?v=...", "highQuality": false}
 ```
 
 Events received on stdout (JSON lines):
@@ -117,23 +104,35 @@ Events received on stdout (JSON lines):
 {"type": "result", "cmd": "process", "data": {...}}
 ```
 
-## Testing
+### Testing
 
 1. Launch app: `npm run tauri dev`
-2. Upload a song → stem separation runs, analysis.json saved
-3. Practice room: play + record
-4. Select take → analysis loads, visualizations appear
-5. Check coaching tips for feedback
+2. Upload a song or paste a YouTube URL → stem separation runs, `library.json` updated
+3. Analyzer page: play, mute/solo/volume per stem, loop a punch region, record a take
+4. Select a take → sync it, export it, or delete it
+5. Export Mix / Download All from the page header
+
+### Type-check only
+
+```bash
+npx tsc --noEmit
+```
 
 ## Build
 
-```bash
-npm run build
+```powershell
+# 1. Build the Python sidecar (first time or after sidecar changes)
+cd sidecar
+python build.py
+copy dist\song-practice-studio-sidecar-x86_64-pc-windows-msvc.exe ..\src-tauri\binaries\
+
+# 2. Build the Tauri app
+cd ..
 npm run tauri build
 ```
 
-Creates standalone `.msi` installer for Windows.
+Produces installers under `src-tauri/target/release/bundle/msi/` and `nsis/`, both named "Song Practice Studio" (bundle identifier `com.songpracticestudio.desktop`).
 
 ---
 
-Built with ❤️ for singers. Enjoy your practice session!
+For the full architecture writeup, data model, and per-feature detail, see `CLAUDE.md` and `wiki/`.
