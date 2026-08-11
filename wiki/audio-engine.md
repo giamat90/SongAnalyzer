@@ -67,7 +67,9 @@ Per-stem volume, mute, and solo resolve to one **effective gain** per instance i
 
 ## Playback Rate
 
-`setPlaybackRate(rate)` calls `setPlaybackRate()` on every instance in the map simultaneously. The rate is persisted in the player store and re-applied whenever new stems are loaded.
+`setPlaybackRate(rate)` calls `setPlaybackRate()` on every stem instance plus `_take` (if loaded), and remembers `rate` in `_lastPlaybackRate` — same re-application pattern as `_outputDeviceId` above, for the same reason: `_take` is destroyed and recreated on every take switch (`loadTakeTrack`), so a rate change only ever reached whichever take instance existed *at that moment*.
+
+**Fixed bug (2026-08-11, ported from a VPS fix):** `loadTakeTrack()` never applied the current rate to the freshly created take instance, so switching takes while at a non-default speed silently reset the newly loaded take to 1x (already-loaded takes were unaffected — `setPlaybackRate()` already covered `_take` live). Fixed by applying `_lastPlaybackRate` to `_take` right after creation, mirroring `_outputDeviceId`'s re-application via `setSinkId`. VPS had a second half to this same bug — `setPlaybackRate()` not touching `take` at all — that doesn't apply here; SPS's `setPlaybackRate()` already included `_take`.
 
 ## Lifecycle
 
