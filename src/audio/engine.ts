@@ -31,6 +31,12 @@ export class AudioEngine {
   // load) inherit the user's choice instead of defaulting to the system output.
   private _outputDeviceId = "";
 
+  // Same reasoning as _outputDeviceId: _take is destroyed and recreated on
+  // every take switch (loadTakeTrack), so without remembering the last-set
+  // rate a freshly loaded take silently reset to 1x even while playing at a
+  // non-default speed.
+  private _lastPlaybackRate = 1;
+
   // Recorded take — separate from the stems map since its duration/start
   // position can differ from the shared song timeline (e.g. punch-in takes).
   private _take: WaveSurfer | null = null;
@@ -164,6 +170,7 @@ export class AudioEngine {
   }
 
   setPlaybackRate(rate: number): void {
+    this._lastPlaybackRate = rate;
     for (const ws of this._stems.values()) ws.setPlaybackRate(rate);
     this._take?.setPlaybackRate(rate);
   }
@@ -209,6 +216,7 @@ export class AudioEngine {
     this._take.setSinkId(this._outputDeviceId).catch((e: unknown) =>
       console.warn("[engine] setSinkId failed for take:", e)
     );
+    this._take.setPlaybackRate(this._lastPlaybackRate);
 
     await new Promise<void>((resolve, reject) => {
       const unsubReady = this._take!.on("ready", () => { unsubReady(); unsubError(); resolve(); });
