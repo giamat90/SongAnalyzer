@@ -72,6 +72,7 @@ def main():
                     stems_to_extract=cmd.get("stemsToExtract"),
                     high_quality=bool(cmd.get("highQuality", False)),
                     on_progress=make_progress_callback("import_yt"),
+                    cookies_path=cmd.get("cookiesPath"),
                 )
                 send({"type": "result", "cmd": "import_yt", "data": result})
 

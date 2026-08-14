@@ -18,8 +18,13 @@ export async function deleteSong(songId: string): Promise<void> {
 }
 
 /** Import a YouTube URL through yt-dlp + Demucs pipeline */
-export async function importYoutube(url: string, stemsToExtract?: StemName[], highQuality?: boolean): Promise<Song> {
-  return invoke<Song>("import_youtube", { url, stemsToExtract, highQuality });
+export async function importYoutube(
+  url: string,
+  stemsToExtract?: StemName[],
+  highQuality?: boolean,
+  cookiesPath?: string | null,
+): Promise<Song> {
+  return invoke<Song>("import_youtube", { url, stemsToExtract, highQuality, cookiesPath });
 }
 
 /** Read detected chord segments for a processed song */

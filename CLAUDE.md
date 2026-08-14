@@ -116,7 +116,8 @@ SongPracticeStudio/
 │   ├── stores/
 │   │   ├── player.ts           ← Zustand: stemVolumes/mute/solo, punch region, transport, recording, latency calibration
 │   │   ├── library.ts          ← Zustand: song list, upload/import, progress
-│   │   └── updater.ts          ← Zustand: auto-update state (tauri-plugin-updater)
+│   │   ├── updater.ts          ← Zustand: auto-update state (tauri-plugin-updater)
+│   │   └── settings.ts         ← Zustand: youtubeCookiesPath (localStorage-persisted, `sps_settings`)
 │   ├── lib/types.ts            ← Song, StemName, Take, ChordSegment, ProcessingStatus
 │   ├── lib/tauri.ts            ← IPC wrappers: processSong, listSongs, saveTake, exportStem, exportMix, …
 │   ├── lib/zoomPan.ts          ← pure zoom-to-cursor / pan math for timeline ctrl+wheel/shift+wheel (byte-identical to VPS)
@@ -143,6 +144,8 @@ SongPracticeStudio/
 │   │   │   └── TakeList.tsx       ← Take list with select/rename/delete
 │   │   ├── updater/
 │   │   │   └── UpdateDialog.tsx   ← Auto-update modal
+│   │   ├── settings/
+│   │   │   └── YouTubeCookiesControl.tsx ← optional cookies.txt picker for import_youtube, avoids the flaky live-browser cookie fallback
 │   │   └── upload/
 │   │       ├── DropZone.tsx       ← File drag-and-drop → processSong
 │   │       ├── YouTubeImport.tsx  ← URL paste → importYoutube

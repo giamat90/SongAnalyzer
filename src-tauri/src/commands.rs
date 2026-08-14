@@ -77,7 +77,11 @@ pub async fn process_song(
     let sidecar = guard.as_ref().ok_or("Sidecar not available")?;
     sidecar.send_command(&cmd)?;
 
-    let timeout = Duration::from_secs(600);
+    // CPU-only Demucs (no CUDA) with high_quality + guitar/piano stems runs a
+    // 2-pass htdemucs_ft → htdemucs_6s cascade with no progress ticks during
+    // the actual model inference, so the gap between messages can legitimately
+    // exceed the old 600s on slow/GPU-less hardware — see MPS wiki/known-issues.md.
+    let timeout = Duration::from_secs(3600);
     loop {
         let msg = sidecar.recv_timeout(timeout)?;
         match msg {
@@ -219,6 +223,7 @@ pub async fn import_youtube(
     url: String,
     stems_to_extract: Option<Vec<String>>,
     high_quality: Option<bool>,
+    cookies_path: Option<String>,
 ) -> Result<Song, String> {
     if !url.contains("youtube.com/") && !url.contains("youtu.be/") {
         return Err("Not a valid YouTube URL".to_string());
@@ -239,12 +244,16 @@ pub async fn import_youtube(
     if let Some(hq) = high_quality {
         cmd["highQuality"] = serde_json::json!(hq);
     }
+    if let Some(ref cookies) = cookies_path {
+        cmd["cookiesPath"] = serde_json::json!(cookies);
+    }
 
     let guard = ensure_sidecar(&state)?;
     let sidecar = guard.as_ref().ok_or("Sidecar not available")?;
     sidecar.send_command(&cmd)?;
 
-    let timeout = Duration::from_secs(900);
+    // Same CPU/no-progress-during-inference reasoning as process_song's timeout above.
+    let timeout = Duration::from_secs(3600);
     loop {
         let msg = sidecar.recv_timeout(timeout)?;
         match msg {

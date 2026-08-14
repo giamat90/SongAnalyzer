@@ -78,8 +78,10 @@ Returns `{ stems: {name: path}, duration, detectedBpm, detectedKey, chords, bass
 Downloads a YouTube video as audio and runs it through the full `process` pipeline.
 
 ```json
-{"cmd": "import_yt", "url": "https://youtube.com/watch?v=...", "outputDir": "/path/to/output/"}
+{"cmd": "import_yt", "url": "https://youtube.com/watch?v=...", "outputDir": "/path/to/output/", "cookiesPath": null}
 ```
+
+`cookiesPath` (optional) — absolute path to a user-exported Netscape-format `cookies.txt`; see the bot-detection fallback note below.
 
 Implemented in `yt_importer.py` via `yt-dlp`. Steps:
 1. Download best audio → `source.wav` (via FFmpegExtractAudio post-processor). Progress maps to 0–15%.
@@ -87,7 +89,9 @@ Implemented in `yt_importer.py` via `yt-dlp`. Steps:
 
 Returns the same dict as `process`, with `"title"` added (from yt-dlp metadata).
 
-**Bot-detection fallback:** first attempt uses no cookies. If YouTube returns a bot-check error, retries with `cookiesfrombrowser` cycling through Chrome → Firefox → Edge → Brave → Opera. Any other error (private video, bad URL, network failure) raises immediately. Partial output files are cleaned up between attempts.
+**Bot-detection fallback:** if `cookiesPath` is set (Settings → YouTube cookies file, a user-exported Netscape-format `cookies.txt`), it's tried first via `cookiefile` — no dependency on a running browser. Otherwise (or if that file is missing/fails), first attempt uses no cookies; if YouTube returns a bot-check error, retries with `cookiesfrombrowser` cycling through Chrome → Firefox → Edge → Brave → Opera. Any other error (private video, bad URL, network failure) raises immediately. Partial output files are cleaned up between attempts.
+
+**Why `cookiesPath` exists:** live `cookiesfrombrowser` extraction is fragile on Windows — Chromium browsers (Chrome/Edge/Brave/Opera) encrypt their cookie store with a key only reliably reachable while that browser is running (Chrome 127+ "app-bound encryption"), and it only tries five hardcoded browser names, so anyone on a different browser (e.g. Ecosia — Chromium-based but not in the list) always falls through to the no-cookies attempt and gets bot-blocked. A one-time exported `cookies.txt` (e.g. via the "Get cookies.txt LOCALLY" extension) sidesteps this entirely. Ported from VPS 2026-08-14 — see MPS `wiki/known-issues.md`/`wiki/feature-parity.md`.
 
 ### `convert_take`
 

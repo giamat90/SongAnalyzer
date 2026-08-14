@@ -17,6 +17,7 @@ import DropZone from "../components/upload/DropZone";
 import YouTubeImport from "../components/upload/YouTubeImport";
 import StemPicker, { DEFAULT_STEMS } from "../components/upload/StemPicker";
 import RecordingOffsetControl from "../components/recording/RecordingOffsetControl";
+import YouTubeCookiesControl from "../components/settings/YouTubeCookiesControl";
 import type { Folder, Song, StemName } from "../lib/types";
 import { useLibraryStore } from "../stores/library";
 
@@ -417,6 +418,7 @@ function LibraryPage({ onSelectSong }: LibraryPageProps) {
 
       {showSettings && (
         <div className="library-page__settings">
+          <YouTubeCookiesControl />
           <RecordingOffsetControl />
         </div>
       )}
