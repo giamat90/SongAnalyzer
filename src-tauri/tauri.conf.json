@@ -1,11 +1,11 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Song Practice Studio",
-  "version": "0.0.34",
+  "version": "0.0.35",
   "identifier": "com.songpracticestudio.desktop",
   "build": {
     "frontendDist": "../dist",
-    "devUrl": "http://localhost:5173",
+    "devUrl": "http://localhost:5183",
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build"
   },
