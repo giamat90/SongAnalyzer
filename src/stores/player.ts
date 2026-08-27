@@ -530,6 +530,17 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => 
     const { song } = get();
     if (!song) return;
 
+    // Deselect any active take before recording a new one. The previous take
+    // stays saved (takes.json is never touched) and re-selectable from the
+    // take list, but it's dropped from playback so the performer records
+    // against the stem mix alone — not their last attempt. Nulling
+    // activeTakeId drives StemView's clearTakeTrack() via its activeTakeId
+    // effect; the direct clearTakeTrack() closes the gap before React flushes.
+    if (get().activeTakeId) {
+      set({ activeTakeId: null });
+      getEngine().clearTakeTrack();
+    }
+
     const eng = getEngine();
     // Honour punch-in: start recording from the punch point, not the playhead
     recordingStartPos = get().punchIn ?? eng.getCurrentTime();
