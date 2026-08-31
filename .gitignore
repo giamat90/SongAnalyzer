@@ -40,3 +40,7 @@ build/
 
 # Logs
 *.log
+
+# Frozen sidecar binary is built in CI (release.yml), not committed
+src-tauri/binaries/*
+!src-tauri/binaries/.gitkeep
