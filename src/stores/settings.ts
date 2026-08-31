@@ -3,18 +3,30 @@ import { create } from "zustand";
 interface SettingsState {
   youtubeCookiesPath: string | null;
   setYoutubeCookiesPath: (path: string | null) => void;
+  collapsedFolders: Record<string, boolean>;
+  setFolderCollapsed: (folderId: string, collapsed: boolean) => void;
 }
 
-type PersistedSettings = { youtubeCookiesPath: string | null };
+type PersistedSettings = {
+  youtubeCookiesPath: string | null;
+  collapsedFolders: Record<string, boolean>;
+};
 
 function _loadSettings(): PersistedSettings {
   try {
     const raw = JSON.parse(localStorage.getItem("sps_settings") ?? "{}") as Record<string, unknown>;
     const cookiesPath = raw.youtubeCookiesPath;
-    return { youtubeCookiesPath: typeof cookiesPath === "string" ? cookiesPath : null };
+    const collapsed = raw.collapsedFolders;
+    return {
+      youtubeCookiesPath: typeof cookiesPath === "string" ? cookiesPath : null,
+      collapsedFolders:
+        collapsed && typeof collapsed === "object" && !Array.isArray(collapsed)
+          ? (collapsed as Record<string, boolean>)
+          : {},
+    };
   } catch (e) {
     console.warn("[settings] Could not load settings:", e);
-    return { youtubeCookiesPath: null };
+    return { youtubeCookiesPath: null, collapsedFolders: {} };
   }
 }
 
@@ -31,6 +43,18 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setYoutubeCookiesPath: (path) => {
     set({ youtubeCookiesPath: path });
-    _persistSettings({ youtubeCookiesPath: get().youtubeCookiesPath });
+    _persist(get);
+  },
+
+  setFolderCollapsed: (folderId, collapsed) => {
+    set({ collapsedFolders: { ...get().collapsedFolders, [folderId]: collapsed } });
+    _persist(get);
   },
 }));
+
+function _persist(get: () => SettingsState): void {
+  _persistSettings({
+    youtubeCookiesPath: get().youtubeCookiesPath,
+    collapsedFolders: get().collapsedFolders,
+  });
+}
