@@ -7,6 +7,10 @@ torch<2.6
 torchaudio<2.6
 demucs
 librosa
+# librosa.effects.pitch_shift's res_type="kaiser_fast" (used by pitch_shift_song,
+# key transpose) lazy-imports resampy at call time — librosa itself doesn't
+# declare it as a hard dependency since its own default res_type is soxr-based.
+resampy
 soundfile
 numpy
 scipy

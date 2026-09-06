@@ -143,6 +143,15 @@ export async function exportMix(
   return invoke("export_mix", { sources, startSec, endSec, suggestedName });
 }
 
+/** Phase-vocoder pitch-shift every stem by nSteps semitones, cached per song/semitone-count */
+export async function pitchShiftSong(
+  songDir: string,
+  stemNames: string[],
+  nSteps: number,
+): Promise<{ stems: Record<string, string> }> {
+  return invoke("pitch_shift_song", { songDir, stemNames, nSteps });
+}
+
 /** Listen for processing progress events */
 export function onProcessingProgress(
   callback: (status: ProcessingStatus) => void

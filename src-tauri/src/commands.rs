@@ -1,4 +1,4 @@
-use crate::library::{self, ChordSegment, Song};
+﻿use crate::library::{self, ChordSegment, Song};
 use crate::sidecar::{SidecarManager, SidecarMessage};
 use crate::storage;
 use crate::takes::{self, Take};
@@ -619,6 +619,57 @@ pub async fn export_take(
     Ok(())
 }
 
+/// Phase-vocoder pitch-shift every requested stem by `n_steps` semitones,
+/// cached under `{song_dir}/pitched/{n_steps}/{stem}.wav` (ported from VPS's
+/// `pitch_shift_song`, generalized from the fixed vocals/instrumental pair to
+/// SPS's dynamic stem set).
+#[tauri::command]
+pub async fn pitch_shift_song(
+    state: State<'_, SidecarState>,
+    song_dir: String,
+    stem_names: Vec<String>,
+    n_steps: i32,
+) -> Result<serde_json::Value, String> {
+    let cache_dir = std::path::Path::new(&song_dir)
+        .join("pitched")
+        .join(n_steps.to_string());
+
+    let cached: std::collections::HashMap<String, String> = stem_names
+        .iter()
+        .map(|name| (name.clone(), cache_dir.join(format!("{name}.wav")).to_string_lossy().to_string()))
+        .collect();
+
+    if stem_names
+        .iter()
+        .all(|name| cache_dir.join(format!("{name}.wav")).exists())
+    {
+        return Ok(serde_json::json!({ "stems": cached }));
+    }
+
+    std::fs::create_dir_all(&cache_dir).map_err(|e| format!("mkdir: {e}"))?;
+
+    let cmd = serde_json::json!({
+        "cmd": "pitch_shift",
+        "songDir": song_dir,
+        "cacheDir": cache_dir.to_string_lossy(),
+        "stemNames": stem_names,
+        "nSteps": n_steps,
+    });
+    let guard = ensure_sidecar(&state)?;
+    let sidecar = guard.as_ref().ok_or("Sidecar not available")?;
+    sidecar.send_command(&cmd)?;
+
+    let timeout = Duration::from_secs(300);
+    loop {
+        let msg = sidecar.recv_timeout(timeout)?;
+        match msg {
+            SidecarMessage::Result { data, .. } => return Ok(data),
+            SidecarMessage::Error { message, .. } => return Err(message),
+            _ => {}
+        }
+    }
+}
+
 /// One track to include in an `export_mix` render. `gain` is the final
 /// linear volume already resolved from mute/solo/volume by the frontend —
 /// this command has no concept of mute/solo, only gains. `start_position`/
@@ -695,3 +746,4 @@ pub async fn export_mix(
     }
     Ok(())
 }
+

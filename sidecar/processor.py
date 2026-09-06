@@ -493,3 +493,44 @@ def process(
         "chords":      chords_written,
         "bassTab":     bass_tab_written,
     }
+
+
+def pitch_shift_song(song_dir: str, cache_dir: str, stem_names: list, n_steps: float, on_progress=None):
+    """Pitch-shift each of `stem_names` by n_steps semitones (ported from VPS,
+    generalized from the fixed vocals/instrumental pair to SPS's dynamic stems).
+
+    Results are written to cache_dir/{stem}.wav. Uses the phase vocoder so
+    tempo is preserved.
+    """
+    if on_progress is None:
+        on_progress = lambda v, s: None
+
+    paths = {}
+
+    for i, name in enumerate(stem_names):
+        input_path = os.path.join(song_dir, f"{name}.wav")
+        output_path = os.path.join(cache_dir, f"{name}.wav")
+
+        on_progress(i / len(stem_names), f"loading-{name}")
+        audio, sr = librosa.load(input_path, sr=None, mono=False)
+
+        on_progress((i + 0.5) / len(stem_names), f"shifting-{name}")
+        if audio.ndim == 1:
+            shifted = librosa.effects.pitch_shift(
+                audio, sr=sr, n_steps=n_steps, res_type="kaiser_fast"
+            )
+        else:
+            shifted = np.stack([
+                librosa.effects.pitch_shift(
+                    audio[ch], sr=sr, n_steps=n_steps, res_type="kaiser_fast"
+                )
+                for ch in range(audio.shape[0])
+            ])
+
+        sf.write(output_path, shifted.T if shifted.ndim > 1 else shifted, sr)
+        paths[name] = output_path
+        del audio, shifted
+        gc.collect()
+
+    on_progress(1.0, "complete")
+    return {"stems": paths}

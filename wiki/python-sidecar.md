@@ -11,6 +11,7 @@ The Python sidecar handles computationally heavy audio processing:
 - **Key detection** — estimate musical key via chromagram
 - **Take post-processing** — WAV conversion and RMS loudness normalization of recordings (`recording.py`)
 - **Mixdown rendering** — sum tracks with per-source gain over a time window (`mix_export`)
+- **Key transpose** — phase-vocoder pitch-shift every stem by N semitones, tempo preserved (`pitch_shift`)
 
 ## IPC Protocol
 
@@ -120,6 +121,14 @@ Renders a single mixdown WAV from a list of sources, honoring the frontend's liv
 ```
 
 Each source is loaded only over the `[startSec, endSec)` window; takes are aligned via `fileTime = projectTime - startPosition + audioOffset`. Sources are resampled/upmixed to a common rate and channel count, summed with per-source gain, then peak-safe scaled before writing.
+
+### `pitch_shift`
+
+Phase-vocoder pitch-shifts each requested stem by `nSteps` semitones (implemented in `processor.py`'s `pitch_shift_song()`), preserving tempo. Ported from VPS 2026-09-05, generalized from VPS's fixed vocals/instrumental pair to SPS's dynamic stem list — `stemNames` is whatever `song.stems` currently holds. Results are written to `cacheDir/{stem}.wav`; Rust's `pitch_shift_song` command checks that cache before sending this command at all.
+
+```json
+{"cmd": "pitch_shift", "songDir": "/path/to/song", "cacheDir": "/path/to/song/pitched/2", "stemNames": ["vocals", "drums", "bass"], "nSteps": 2}
+```
 
 ### `ping` / `quit`
 

@@ -108,6 +108,17 @@ def main():
                 )
                 send({"type": "result", "cmd": "mix_export", "data": result})
 
+            elif cmd.get("cmd") == "pitch_shift":
+                from processor import pitch_shift_song
+                result = pitch_shift_song(
+                    cmd["songDir"],
+                    cmd["cacheDir"],
+                    cmd["stemNames"],
+                    cmd["nSteps"],
+                    on_progress=make_progress_callback("pitch_shift"),
+                )
+                send({"type": "result", "cmd": "pitch_shift", "data": result})
+
             elif cmd.get("cmd") == "ping":
                 send({"type": "pong"})
 

@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { AudioEngine } from "../audio/engine";
 import { VocalRecorder } from "../audio/recorder";
 import type { Song, StemName, Take } from "../lib/types";
-import { saveTake, listTakes, deleteTakeApi, renameTakeApi, setTakeManualOffsetApi, setMetronomeOffsetApi } from "../lib/tauri";
+import { saveTake, listTakes, deleteTakeApi, renameTakeApi, setTakeManualOffsetApi, setMetronomeOffsetApi, pitchShiftSong } from "../lib/tauri";
 import { metronome } from "../audio/metronome";
 import { countInDurationSeconds } from "../lib/metronomeSync";
 
@@ -88,6 +88,10 @@ interface PlayerState {
   stemVolumes: Record<string, number>;
   mutedStems: Record<string, boolean>;
   soloedStem: string | null;
+  // Key transpose (ported from VPS): active semitone shift, phase-vocoder
+  // rendered per-stem and cached under {songDir}/pitched/{n}/.
+  transpose: number;
+  isTransposing: boolean;
   // Punch-in / punch-out region
   punchIn: number | null;
   punchOut: number | null;
@@ -135,6 +139,7 @@ interface PlayerActions {
   setStemVolume: (name: StemName | string, volume: number) => void;
   toggleMute: (name: string) => void;
   toggleSolo: (name: string) => void;
+  setTranspose: (semitones: number) => Promise<void>;
   cleanup: () => void;
   // Punch region actions
   setPunchIn: (t: number) => void;
@@ -257,6 +262,8 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => 
   stemVolumes: {},
   mutedStems: {},
   soloedStem: null,
+  transpose: 0,
+  isTransposing: false,
   punchIn: null,
   punchOut: null,
   punchLoop: false,
@@ -323,6 +330,8 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => 
       stemVolumes: initialVolumes,
       mutedStems: {},
       soloedStem: null,
+      transpose: 0,
+      isTransposing: false,
       takes: [],
       activeTakeId: null,
       takeVolume: 1.0,
@@ -409,6 +418,31 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => 
     }
   },
 
+  setTranspose: async (semitones) => {
+    const { song, transpose } = get();
+    if (!song || semitones === transpose) return;
+
+    getEngine().pause();
+    set({ isTransposing: true, isPlaying: false });
+
+    try {
+      let paths: Record<string, string>;
+      if (semitones === 0) {
+        const dir = song.directory.replace(/\\/g, "/");
+        paths = Object.fromEntries(song.stems.map((name) => [name, `${dir}/${name}.wav`]));
+      } else {
+        const result = await pitchShiftSong(song.directory, song.stems, semitones);
+        paths = result.stems;
+      }
+
+      await getEngine().reloadStemsFromPaths(paths);
+      set({ transpose: semitones, isTransposing: false });
+    } catch (e) {
+      set({ isTransposing: false });
+      throw e;
+    }
+  },
+
   cleanup: () => {
     getEngine().destroy();
     recorder?.dispose();
@@ -420,6 +454,8 @@ export const usePlayerStore = create<PlayerState & PlayerActions>((set, get) => 
       stemVolumes: {},
       mutedStems: {},
       soloedStem: null,
+      transpose: 0,
+      isTransposing: false,
       isRecording: false,
       isSavingTake: false,
       takes: [],

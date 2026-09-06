@@ -34,6 +34,7 @@ pub fn run() {
             commands::export_take,
             commands::export_mix,
             commands::read_song_chords,
+            commands::pitch_shift_song,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

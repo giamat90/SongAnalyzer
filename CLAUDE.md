@@ -41,7 +41,8 @@ Replaces the fixed `vocals`/`instrumental`/`take` WaveSurfer trio with a dynamic
 ### Player store (`src/stores/player.ts`)
 `stemVolumes: Record<string, number>` per-stem volume, `mutedStems: Record<string, boolean>` and `soloedStem: string | null` for the per-stem mute/solo buttons.  
 Punch region state (`punchIn`, `punchOut`, `punchLoop`) is shared with the TimeRuler — same pattern as VPS.  
-Recording state: `isRecording`, `isSavingTake`, `takes: Take[]`, `activeTakeId`, `takeVolume`, mic/output device selection, and `recordingOffsets: Record<string, CalibrationEntry>` (per-device latency calibration `{ offset, stale?, madMs? }`, localStorage-backed, with `usedLatencyFallback` set when recording starts without a usable calibration). Recording auto-stops when playback stops itself (punch-out or song end). No transpose state (VPS-only).  
+Recording state: `isRecording`, `isSavingTake`, `takes: Take[]`, `activeTakeId`, `takeVolume`, mic/output device selection, and `recordingOffsets: Record<string, CalibrationEntry>` (per-device latency calibration `{ offset, stale?, madMs? }`, localStorage-backed, with `usedLatencyFallback` set when recording starts without a usable calibration). Recording auto-stops when playback stops itself (punch-out or song end).  
+`transpose`/`isTransposing` (ported from VPS): active semitone shift (±6) and in-flight flag for `setTranspose(semitones)`, which calls `pitch_shift_song(songDir, song.stems, nSteps)` (phase-vocoder, cached per song/semitone-count under `pitched/{n}/{stem}.wav`) then `AudioEngine.reloadStemsFromPaths()` to swap every loaded stem's file in place — see `wiki/audio-engine.md` and [MPS/wiki/lineage.md](../wiki/lineage.md). `KeyTranspose.tsx` renders the +/-/Reset control in `AnalyzerPage.tsx`'s topbar.  
 Timeline zoom/pan state: `minPxPerSec` (zoom level, WaveSurfer's own px-per-second unit) and `scrollTime` (song time at the left edge of the visible window) — ctrl+wheel/shift+wheel over the stem timeline; see `wiki/audio-engine.md#timeline-zoompan`.  
 `metronomeOffset` (song time (s) where the metronome's beat 1 lands, persisted per song via `set_metronome_offset`) — drag the downbeat marker on the TimeRuler, or "Set" to the current playhead, in `TempoControl`; see `wiki/components.md#tempocontrol`.
 
@@ -100,9 +101,9 @@ Persisted in `takes.json` inside the song directory; audio in `takes/{takeId}.wa
 ```
 SongPracticeStudio/
 ├── sidecar/
-│   ├── processor.py      ← Demucs 6s + BPM + key + chords + bass tab; main pipeline
+│   ├── processor.py      ← Demucs 6s + BPM + key + chords + bass tab (main pipeline) + pitch_shift_song (transpose)
 │   ├── yt_importer.py    ← yt-dlp download → processor.process()
-│   ├── main.py           ← JSON-lines command dispatcher (process, import_yt, convert_take, normalize_take, mix_export, ping, quit)
+│   ├── main.py           ← JSON-lines command dispatcher (process, import_yt, convert_take, normalize_take, mix_export, pitch_shift, ping, quit)
 │   ├── recording.py      ← take WAV conversion (convert_take_to_wav), RMS loudness normalization (normalize_take), mixdown rendering (mix_export)
 │   ├── fetch_models.py   ← vendors htdemucs weights into the frozen build at build time
 │   ├── version_check.py  ← proactive + reactive yt-dlp staleness checks (see MPS/wiki/known-issues.md)
@@ -136,6 +137,7 @@ SongPracticeStudio/
 │   │   │   ├── TimeRuler.tsx      ← Canvas ruler with drag-to-create punch region
 │   │   │   ├── TransportControls.tsx  ← Play/pause/stop + time display
 │   │   │   ├── TempoControl.tsx   ← BPM-first speed control + metronome toggle
+│   │   │   ├── KeyTranspose.tsx   ← semitone transpose UI (ported from VPS)
 │   │   │   └── OutputSelector.tsx ← Audio output device picker (ported from VPS)
 │   │   ├── recording/
 │   │   │   ├── RecordButton.tsx   ← Start/stop recording
@@ -155,7 +157,7 @@ SongPracticeStudio/
 │   │   └── AnalyzerPage.tsx   ← Header + StemView + transport/tempo footer
 │   └── App.tsx                ← Two-page router: library ↔ analyzer
 └── src-tauri/src/
-    ├── commands.rs   ← process_song, import_youtube, read_song_chords, export_stem, export_all, export_take, export_mix, save_take, list_takes, delete_take, rename_take, set_take_manual_offset, list_songs, delete_song, set_metronome_offset, list_folders, create_folder, rename_folder, delete_folder, reorder_folders, move_songs
+    ├── commands.rs   ← process_song, import_youtube, read_song_chords, export_stem, export_all, export_take, export_mix, save_take, list_takes, delete_take, rename_take, set_take_manual_offset, list_songs, delete_song, set_metronome_offset, list_folders, create_folder, rename_folder, delete_folder, reorder_folders, move_songs, pitch_shift_song
     ├── library.rs    ← Song struct (includes stems: Vec<String>, hasChords, folderId, sortIndex), Folder/ChordSegment structs, library.json CRUD, read_chords()
     ├── takes.rs      ← Take struct + takes.json CRUD (per song)
     ├── sidecar.rs     ← SidecarManager, JSON-lines IPC
@@ -244,7 +246,6 @@ Recording exists here — do not trust older docs claiming otherwise. Key points
 
 - Pitch analysis (PianoRoll, PianoKeyboard, DualTuner, analysis store, SRH sidecar)
 - Coaching panel (CoachPanel)
-- Key transpose (KeyTranspose, pitch_shift_song)
 - Vibrato / timing / dynamics analysis cards
 - Short-Term Spectrum / spectrogram panels
 - Free Exercise mode (song-less recording)

@@ -136,6 +136,7 @@ All data lives under `~/.songpracticestudio/` (`C:\Users\{user}\.songpracticestu
 | `export_take` | `takePath, suggestedName: string` | `void` (always WAV; sidecar `convert_take` first) |
 | `export_mix` | `sources: MixSource[], startSec, endSec: f64, suggestedName: string` | `void` (sidecar `mix_export`, then Save-As) |
 | `export_all` | `entries: ZipEntry[] ({path, archiveName}), suggestedName: string` | `void` (native Save-As dialog for `.zip`; `zip` crate writes each entry, no sidecar involved) |
+| `pitch_shift_song` | `songDir: string, stemNames: string[], nSteps: i32` | `{ stems: Record<string, string> }` (phase-vocoder shift via sidecar `pitch_shift`, cached under `{songDir}/pitched/{nSteps}/{stem}.wav`; ported from VPS, generalized from the fixed vocals/instrumental pair — see `wiki/audio-engine.md#key-transpose`) |
 
 All commands are async and return a `Promise`. Errors are thrown as strings.
 

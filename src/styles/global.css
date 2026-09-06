@@ -1,4 +1,4 @@
-*,
+﻿*,
 *::before,
 *::after {
   box-sizing: border-box;
@@ -1102,6 +1102,69 @@ body,
   cursor: default;
 }
 
+/* Key Transpose */
+.key-transpose {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.key-transpose__label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.key-transpose__controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.key-transpose__btn {
+  background: var(--bg-surface);
+  border: none;
+  color: var(--text-primary);
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-size: 1rem;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.key-transpose__btn:hover {
+  background: var(--accent);
+}
+
+.key-transpose__value {
+  font-size: 0.85rem;
+  min-width: 2.5rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.key-transpose__value--pending {
+  animation: key-transpose-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes key-transpose-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.9; }
+}
+
+.key-transpose__reset {
+  width: auto;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
 .transport__volumes {
   display: flex;
   gap: 1.5rem;
@@ -1243,60 +1306,6 @@ body,
 .tempo-control__downbeat-btn:hover {
   border-color: var(--accent);
   color: var(--text-primary);
-}
-
-/* Key Transpose */
-.key-transpose {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.key-transpose__label {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.key-transpose__controls {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.key-transpose__btn {
-  background: var(--bg-surface);
-  border: none;
-  color: var(--text-primary);
-  width: 28px;
-  height: 28px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 1rem;
-  font-family: inherit;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s;
-}
-
-.key-transpose__btn:hover {
-  background: var(--accent);
-}
-
-.key-transpose__value {
-  font-size: 0.85rem;
-  min-width: 40px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-.key-transpose__reset {
-  width: auto;
-  padding: 0.2rem 0.5rem;
-  font-size: 0.7rem;
-  color: var(--text-secondary);
 }
 
 /* Output Selector */

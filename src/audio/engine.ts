@@ -125,6 +125,38 @@ export class AudioEngine {
     });
   }
 
+  // Swaps each already-loaded stem's underlying audio file in place (used by
+  // transpose) instead of destroying/recreating instances, so containers,
+  // volumes, and the take/zoom state stay untouched. Mirrors VPS's
+  // loadVocalsFromPath/loadInstrumentalFromPath, generalized to the dynamic
+  // stems Map.
+  async reloadStemsFromPaths(paths: Record<string, string>): Promise<void> {
+    if (this._stems.size === 0) return;
+    const time = this.getCurrentTime();
+    const wasPlaying = this._isPlaying;
+    if (wasPlaying) this.pause();
+
+    const promises = [...this._stems.entries()].map(([name, ws]) => {
+      const path = paths[name];
+      if (!path) return Promise.resolve();
+      const url = convertFileSrc(path.replace(/\\/g, "/"));
+      return new Promise<void>((resolve, reject) => {
+        const unsubReady = ws.on("ready", () => { unsubReady(); unsubError(); resolve(); });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const unsubError = ws.on("error", (err: any) => {
+          unsubReady(); unsubError();
+          reject(new Error(`${name} failed to reload: ${err?.message ?? err}`));
+        });
+        ws.load(url);
+      });
+    });
+
+    await Promise.all(promises);
+    if (this._master) this._duration = this._master.getDuration();
+    this.seekTo(time);
+    if (wasPlaying) this.play();
+  }
+
   play(): void {
     if (this._stems.size === 0) return;
     for (const ws of this._stems.values()) ws.play();

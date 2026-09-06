@@ -20,6 +20,7 @@ App
 │   │   ├── TransportControls  — play/pause/stop + current time display
 │   │   ├── LoopButton         — punch-loop toggle
 │   │   ├── TempoControl       — BPM-first speed control
+│   │   ├── KeyTranspose       — semitone transpose control (ported from VPS)
 │   │   ├── MicSelector        — microphone input picker
 │   │   ├── OutputSelector     — audio output device picker (ported from VPS)
 │   │   ├── RecordButton       — start/stop recording
@@ -200,6 +201,12 @@ The anchor is set two ways, both in `TempoControl`'s new "Downbeat" row (shown o
 - **Drag** — `TimeRuler` draws a draggable marker (dashed blue vertical line + downward flag at the bottom edge) at the anchor's position, hit-tested with priority over the existing punch-region `create`/`drag-in`/`drag-out` modes (a new `"drag-metronome"` `DragMode` and a third `overrideMetronome` parameter on `draw()`, mirroring `overrideIn`/`overrideOut`).
 
 A "↺" reset-to-0 button appears next to Set once the offset is nonzero.
+
+### KeyTranspose
+
+Semitone transpose control (`src/components/player/KeyTranspose.tsx`), ported from VPS verbatim — same file, only the import path (`../../stores/player`, already the identical relative path in both projects) needed no change. Renders `-`/`+`/Reset buttons around a `±N st` readout, clamped to ±6 semitones; `Reset` only appears once `transpose !== 0`. All three controls are `disabled` while `isTransposing` or with no song loaded, and the readout pulses (`.key-transpose__value--pending`) during a shift.
+
+Clicking `-`/`+` calls the player store's `setTranspose(semitones)`, which — unlike VPS's fixed vocals/instrumental pair — resolves **every stem currently in `song.stems`**: at `semitones === 0` it points each stem back at its plain `{songDir}/{stem}.wav`; otherwise it calls the Tauri `pitch_shift_song(songDir, song.stems, semitones)` command (phase vocoder, Rust-cached per song/semitone-count) and gets back a `{ stems: Record<string, string> }` map. Either way the resulting paths are handed to `AudioEngine.reloadStemsFromPaths()`, which swaps each stem WaveSurfer instance's underlying file in place — see `wiki/audio-engine.md#key-transpose`. Rendered in `AnalyzerPage.tsx`'s topbar next to `TempoControl` (VPS renders it in `PracticeRoom.tsx`'s equivalent topbar).
 
 ### DropZone
 

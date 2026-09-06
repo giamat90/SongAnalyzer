@@ -37,6 +37,12 @@ This mutates real DOM/WaveSurfer state directly (`marginLeft`/`width`/seek posit
 
 `setOutputDevice(deviceId)` re-routes every existing instance via `setSinkId` and remembers the id so newly created stem/take instances are routed on creation too (a fresh instance otherwise defaults to the system device).
 
+## Key Transpose
+
+Ported from VPS 2026-09-05, generalized from VPS's fixed vocals/instrumental pair to SPS's dynamic stem set. `player.ts`'s `setTranspose(semitones)` resolves each stem's file path — the plain `{songDir}/{stem}.wav` at `semitones === 0`, or the cached/rendered `pitch_shift_song(songDir, song.stems, semitones)` result otherwise (phase vocoder, Rust-cached under `{songDir}/pitched/{n}/{stem}.wav`) — then calls `AudioEngine.reloadStemsFromPaths(paths: Record<string, string>)`.
+
+`reloadStemsFromPaths` pauses playback, calls `.load(url)` on every `_stems` Map entry that has an entry in `paths` (awaiting each instance's `"ready"`/`"error"` event, same pattern as `load()`'s initial creation), re-reads `_duration` from `_master`, reseeks to the pre-shift `currentTime`, and resumes playback if it was playing. This swaps the underlying audio in place rather than destroying/recreating WaveSurfer instances, so containers, per-stem volumes, mute/solo state, zoom/scroll, and the take track are all untouched — the same trade VPS's two named `loadVocalsFromPath`/`loadInstrumentalFromPath` methods make, generalized to one method iterating the Map instead of two fixed instances.
+
 ## Click-to-Seek Sync
 
 WaveSurfer's `"interaction"` event fires only on user clicks (not programmatic `seekTo`). When the user clicks any stem waveform, the engine converts the click position to an absolute time and calls `seekTo()` on all other instances. The `"interaction"` event (rather than the older `"seeking"`) avoids the infinite seek loop that arises when each `seekTo` would trigger another event.
